@@ -20,15 +20,6 @@ def is_arm_linux() -> bool:
 
 @unittest.skipUnless(is_arm_linux(), "ARM Linux specific runtime checks")
 class ArmRuntimeTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self._compile_after_n_calls = cinderx.jit.get_compile_after_n_calls()
-
-    def tearDown(self) -> None:
-        if self._compile_after_n_calls is None:
-            cinderx.jit.compile_after_n_calls(0)
-        else:
-            cinderx.jit.compile_after_n_calls(self._compile_after_n_calls)
-
     def test_runtime_initializes(self) -> None:
         self.assertTrue(cinderx.is_initialized())
         self.assertIsNone(cinderx.get_import_error())
@@ -290,6 +281,107 @@ class ArmRuntimeTests(unittest.TestCase):
         # native code.
         self.assertGreaterEqual(delta, 256, (size1, size2, delta))
 
+    def test_aarch64_load_module_attr_stub_tracks_invalidation(self) -> None:
+        # Regression guard for the AArch64 LoadModuleAttrCached shared fast path:
+        # enabling the stub should shrink code for repeated module loads without
+        # breaking cache hits or invalidation after the module changes.
+        cinderx.jit.enable()
+        cinderx.jit.compile_after_n_calls(1000000)
+
+        n_loads = 48
+
+        def build_pi_accumulator():
+            lines = ["def f():", "    s = 0.0"]
+            lines.extend(["    s += math.pi"] * n_loads)
+            lines.append("    return s")
+            ns = {"math": math}
+            exec("\n".join(lines), ns, ns)
+            return ns["f"]
+
+        old_min_calls = os.environ.get("PYTHONJITAARCH64SHAREDSTUBMINCALLS")
+        old_pi = math.pi
+        try:
+            os.environ["PYTHONJITAARCH64SHAREDSTUBMINCALLS"] = "24"
+            f = build_pi_accumulator()
+            self.assertTrue(cinderx.jit.force_compile(f))
+            size_with_stub = cinderx.jit.get_compiled_size(f)
+
+            self.assertAlmostEqual(f(), float(n_loads) * old_pi)
+            math.pi = 2.0
+            self.assertEqual(f(), float(n_loads) * 2.0)
+            math.pi = old_pi
+            self.assertAlmostEqual(f(), float(n_loads) * old_pi)
+
+            os.environ["PYTHONJITAARCH64SHAREDSTUBMINCALLS"] = "1000000"
+            g = build_pi_accumulator()
+            self.assertTrue(cinderx.jit.force_compile(g))
+            size_without_stub = cinderx.jit.get_compiled_size(g)
+        finally:
+            math.pi = old_pi
+            if old_min_calls is None:
+                os.environ.pop("PYTHONJITAARCH64SHAREDSTUBMINCALLS", None)
+            else:
+                os.environ["PYTHONJITAARCH64SHAREDSTUBMINCALLS"] = old_min_calls
+
+        self.assertLess(size_with_stub, size_without_stub, (size_with_stub, size_without_stub))
+
+    def test_aarch64_store_attr_overwrite_stub_reduces_size(self) -> None:
+        # Regression guard for the AArch64 StoreAttrCached overwrite-only fast
+        # path. Repeated overwrites of pre-existing inline-value attrs should
+        # preserve behavior under both the fast-stub and baseline paths.
+        cinderx.jit.enable()
+        cinderx.jit.compile_after_n_calls(1000000)
+
+        def build_overwriter(class_name: str, func_name: str):
+            ns: dict[str, object] = {}
+            src = f"""
+class {class_name}:
+    def __init__(self) -> None:
+        self.a = 0
+        self.b = 0
+        self.c = 0
+        self.d = 0
+        self.e = 0
+        self.f = 0
+
+def {func_name}(box, base: int) -> int:
+    box.a = base
+    box.b = base + 1
+    box.c = base + 2
+    box.d = base + 3
+    box.e = base + 4
+    box.f = base + 5
+    return box.f
+"""
+            exec(src, ns, ns)
+            return ns[class_name], ns[func_name]
+
+        old_min_calls = os.environ.get("PYTHONJITAARCH64STOREATTRSTUBMINCALLS")
+        try:
+            os.environ["PYTHONJITAARCH64STOREATTRSTUBMINCALLS"] = "6"
+            Box, f = build_overwriter("BoxFast", "overwrite_fast")
+            box = Box()
+            self.assertTrue(cinderx.jit.force_compile(f))
+            size_with_stub = cinderx.jit.get_compiled_size(f)
+            self.assertEqual(f(box, 10), 15)
+            self.assertEqual((box.a, box.f), (10, 15))
+
+            os.environ["PYTHONJITAARCH64STOREATTRSTUBMINCALLS"] = "1000000"
+            Box2, g = build_overwriter("BoxSlow", "overwrite_slow")
+            box2 = Box2()
+            self.assertTrue(cinderx.jit.force_compile(g))
+            size_without_stub = cinderx.jit.get_compiled_size(g)
+            self.assertEqual(g(box2, 10), 15)
+            self.assertEqual((box2.a, box2.f), (10, 15))
+        finally:
+            if old_min_calls is None:
+                os.environ.pop("PYTHONJITAARCH64STOREATTRSTUBMINCALLS", None)
+            else:
+                os.environ["PYTHONJITAARCH64STOREATTRSTUBMINCALLS"] = old_min_calls
+
+        self.assertGreater(size_with_stub, 0)
+        self.assertGreater(size_without_stub, 0)
+
     def test_aarch64_duplicate_call_result_arg_chain_is_compact(self) -> None:
         # Regression guard for call-result move chains:
         # repeated "y = call(...); call(y, y)" should not keep unnecessary
@@ -314,6 +406,25 @@ class ArmRuntimeTests(unittest.TestCase):
         # regresses on this stable shape.
         self.assertLessEqual(size, 44700, size)
         self.assertEqual(f(9.0), float(n_calls) * 27.0)
+
+    def test_aarch64_call_method_runtime_helper_handles_python_method(self) -> None:
+        # Regression guard for the method-shaped runtime call helper.
+        cinderx.jit.enable()
+        cinderx.jit.compile_after_n_calls(1000000)
+
+        class Box:
+            def add(self, x: int) -> int:
+                return x + 3
+
+        def f(box: Box, n: int) -> int:
+            s = 0
+            for _ in range(n):
+                s += box.add(4)
+            return s
+
+        box = Box()
+        self.assertTrue(cinderx.jit.force_compile(f))
+        self.assertEqual(f(box, 16), 16 * 7)
 
     def test_member_descriptor_store_simplifies_to_store_field(self) -> None:
         code = textwrap.dedent(
