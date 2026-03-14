@@ -1,62 +1,65 @@
-# 任务计划：在 ARM 3.14 上启用 LIGHTWEIGHT_FRAMES（含 LTO/PGO/ADAPTIVE_STATIC）
+# Task Plan: Analyze Arm vs AMD pyperformance regressions against CPython
 
-## 目标
-让 `ENABLE_LIGHTWEIGHT_FRAMES` 在 Python 3.14 ARM 上可以正确构建并稳定运行，并通过纯远端验证确认其可与 `CINDERX_ENABLE_LTO=1`、`CINDERX_ENABLE_PGO=1`、`ENABLE_ADAPTIVE_STATIC_PYTHON=1` 同时开启。
+## Goal
+Create a detailed, evidence-backed analysis plan for comparing this repository's current branch against upstream CPython and use the code differences to assess likely causes of regressions in specific pyperformance benchmarks, prioritized by impact.
 
-## 当前阶段
-第 6 阶段
+## Current Phase
+Phase 1
 
-## 阶段划分
+## Phases
+### Phase 1: Requirements & Discovery
+- [ ] Confirm repository state and comparison targets
+- [ ] Identify benchmark list, priority, and expected deliverable format
+- [ ] Document initial findings in findings.md
+- **Status:** complete
 
-### 阶段 1：头脑风暴与需求澄清
-- [x] 加载必需技能（`using-superpowers`、`planning-with-files`、`brainstorming`、`writing-plans`、`test-driven-development`、`verification-before-completion`）
-- [x] 提取用户约束
-- [x] 明确远端测试入口与验收标准
-- [x] 形成可选方案并确认
-- **状态：** 已完成
+### Phase 2: Code Difference Mapping
+- [ ] Map current branch against upstream CPython base
+- [ ] Identify subsystems and files with the largest or hottest-path deltas
+- [ ] Correlate code differences with listed benchmarks
+- **Status:** complete
 
-### 阶段 2：撰写计划
-- [x] 在 `docs/plans/YYYY-MM-DD-enable-lightweight-frames-314-arm.md` 写实现计划
-- [x] 确保计划包含 TDD 与远端验证步骤
-- **状态：** 已完成
+### Phase 3: Regression Hypothesis Analysis
+- [ ] Build per-benchmark hypotheses for Arm vs AMD divergence
+- [ ] Rank hypotheses by likelihood and expected impact
+- [ ] Note missing evidence and validation steps
+- **Status:** in_progress
 
-### 阶段 3：TDD（RED -> GREEN）
-- [x] 为 `ENABLE_LIGHTWEIGHT_FRAMES` 行为与选项接线补充/调整测试
-- [x] 在远端入口先观测 RED 失败
-- [x] 以最小改动实现 GREEN
-- **状态：** 已完成
+### Phase 4: Detailed Plan Authoring
+- [ ] Produce an execution-ready investigation plan
+- [ ] Include commands, files, metrics, and decision points
+- [ ] Prioritize benchmarks and shared root-cause clusters
+- [ ] Reshape the execution plan around one-click script generation for the isolated Linux Arm environment
+- **Status:** in_progress
 
-### 阶段 4：集成验证（LTO/PGO/Adaptive Static）
-- [x] 确认各标志可共存（setup/CMake/运行时）
-- [x] 处理 ARM 远端编译/运行中出现的问题
-- [x] 保持改动最小且聚焦
-- **状态：** 已完成
+### Phase 5: Delivery
+- [ ] Summarize findings and assumptions
+- [ ] Call out risks, unknowns, and next validation steps
+- [ ] Deliver plan and code-difference analysis to user
+- **Status:** pending
 
-### 阶段 5：完成前验证
-- [x] 执行完整远端验证矩阵（无 LTO、LTO、PGO+LTO）
-- [x] 验证 `ENABLE_LIGHTWEIGHT_FRAMES` 生效且不回退 adaptive static
-- [x] 收集命令输出/证据并追加到 `findings.md`
-- **状态：** 已完成
+## Key Questions
+1. Which source-level deltas most plausibly affect interpreter hot paths used by the listed benchmarks?
+2. Which regressions are likely architecture-sensitive versus benchmark-specific?
+3. What ordering of investigation will maximize shared learning across the benchmark set?
 
-### 阶段 6：交付
-- [x] 汇总代码改动与验证证据
-- [x] 确认仓库清洁状态并给出下一步命令
-- **状态：** 已完成
+## Decisions Made
+| Decision | Rationale |
+|----------|-----------|
+| Compare this repo's current HEAD to upstream CPython commit `ebf955df7a89ed0c7968f79faec1de49f61ed7cb` and nearby lineage in `~/Repo/cpython` | Matches the user-provided benchmark baseline |
+| Focus first on runtime/interpreter/object-model/import/startup deltas before benchmark-specific code | These areas can explain multiple regressions at once |
+| Treat this as a cross-repo extension-vs-upstream comparison, not a same-history git diff | `cinderx` is not a full CPython checkout and the upstream commit is not reachable from its history |
+| Use existing local plans/findings as prior evidence, but keep current conclusions grounded in current-branch code | The repo already contains verified ARM investigations for `raytrace`, `float`, `generators`, and interpreter overhead |
+| Use isolated Linux Arm as the only source of performance truth | Matches the user's environment constraint |
+| Use local macOS Arm only to pierce functionality and prepare narrower remote checks | Reduces remote iteration cost without polluting final perf conclusions |
+| Prioritize generating one-click scripts after diff-point analysis | Fits the network-isolated workflow and minimizes manual steps on the target host |
 
-## 关键问题
-1. 本任务 `<远端测试入口>` 的权威命令是什么？ -> `ssh root@124.70.162.35`
-2. 判定“LIGHTWEIGHT_FRAMES 已启用”的权威信号是什么？ -> `cinderx.is_lightweight_frames_enabled()`
-3. 最终验证是否需要 `test_oss_quick.py` + 新增定向测试？ -> 是。
+## Errors Encountered
+| Error | Attempt | Resolution |
+|-------|---------|------------|
+| planning-with-files `session-catchup.py` not found in expected path | 1 | Proceed with manual initialization of planning files and note the missing helper script |
 
-## 已定决策
-| 决策 | 理由 |
-|------|------|
-| 仅用远端测试/验证 | 用户显式约束 |
-| 必须按闭环执行（brainstorming -> plan -> TDD -> verification） | 用户显式要求 |
-| 第一阶段仅覆盖 3.14 ARM，3.15 默认关闭 | 用户要求优先 3.14，并延期 3.15 |
-
-## 遇到的问题
-| 问题 | 尝试次数 | 解决方式 |
-|------|----------|----------|
-| `planning-with-files` 默认脚本路径不存在（`~/.codex/skills/...`） | 1 | 改用实际安装路径 `~/.codex/planning-with-files/.codex/skills/...` |
-| `CINDERX_ENABLE_PGO=1 CINDERX_ENABLE_LTO=1` 下 `test_generators` 偶发失败 | 1 | 在 `setup.py` 的 `run_pgo_workload` 增加有界重试（2 次），并远端复验 |
+## Notes
+- Keep findings grounded in local repository evidence.
+- Distinguish confirmed diffs from inferred performance hypotheses.
+- Prefer shared root-cause clusters over isolated benchmark narratives where possible.

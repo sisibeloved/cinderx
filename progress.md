@@ -1,86 +1,106 @@
-﻿# Progress Log
+# Progress Log
 
-## Session: 2026-02-25
+## Session: 2026-03-14
 
-### Phase 1: Brainstorming & Requirements
-- **Status:** in_progress
-- **Started:** 2026-02-25
+### Phase 1: Requirements & Discovery
+- **Status:** complete
+- **Started:** 2026-03-14
 - Actions taken:
-  - Loaded required skills:
-    - `using-superpowers`
-    - `planning-with-files`
-    - `brainstorming`
-    - `writing-plans`
-    - `test-driven-development`
-    - `verification-before-completion`
-  - Ran planning session catchup script from installed path.
-  - Reviewed current `task_plan.md`, `progress.md`, and latest `findings.md` sections to recover state.
-  - Began new task plan for `ENABLE_LIGHTWEIGHT_FRAMES` integration with LTO/PGO/adaptive static.
+  - Read `using-superpowers`, `writing-plans`, `planning-with-files`, and `brainstorming` skills to determine required workflow.
+  - Initialized planning files in the project root for this analysis task.
+  - Confirmed current `cinderx` branch and verified that the upstream benchmark baseline commit is not present in `cinderx` history.
+  - Confirmed the repository is extension-style rather than a full CPython checkout, which changes the comparison method.
 - Files created/modified:
-  - task_plan.md (updated for this task)
-  - progress.md (this file)
+  - `/Users/luchen/Repo/cinderx/task_plan.md` (created)
+  - `/Users/luchen/Repo/cinderx/findings.md` (created)
+  - `/Users/luchen/Repo/cinderx/progress.md` (created)
+
+### Phase 2: Code Difference Mapping
+- **Status:** complete
+- Actions taken:
+  - Created a detached upstream CPython worktree at `/tmp/cpython-ebf955` for path-based comparison.
+  - Read current-branch interpreter, startup, and JIT hot-path files.
+  - Read existing local plans/findings for interpreter overhead, `raytrace`, `float`, `generators`, and global-guard work.
+  - Mapped likely root-cause clusters across the requested pyperformance benchmarks.
+- Files created/modified:
+  - `/Users/luchen/Repo/cinderx/findings.md` (updated)
+  - `/Users/luchen/Repo/cinderx/task_plan.md` (updated)
+
+### Phase 3: Regression Hypothesis Analysis
+- **Status:** complete
+- Actions taken:
+  - Derived initial per-benchmark hypotheses from shared code-difference clusters.
+  - Ranked likely high-priority benchmarks by breadth of shared root causes and strength of existing evidence.
+  - Converted the analysis into an execution-oriented command checklist using existing ARM scripts and pyperformance entrypoints.
+- Files created/modified:
+  - `/Users/luchen/Repo/cinderx/findings.md` (updated)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-arm-amd-cpython-regression-analysis.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-arm-amd-cpython-regression-execution-checklist.md` (created)
+
+### Phase 4: Detailed Plan Authoring
+- **Status:** in_progress
+- Actions taken:
+  - Wrote a detailed analysis plan document.
+  - Wrote a concrete execution checklist with commands, outputs, and decision rules.
+  - Wrote a compressed first-pass runbook covering only `coroutines`, `richards`, `raytrace`, and `python_startup`.
+  - Incorporated the environment constraints that Linux Arm is the only valid performance source and macOS Arm is probing-only.
+  - Deepened the platform-difference analysis to include JIT backend arch splits, TLS access patterns, indirect call lowering, and frame metadata/store differences between AArch64 and x86_64.
+  - Used the local `/Users/luchen/Repo/pyperformance` checkout to identify the exact `bm_coroutines` benchmark source and reduce the benchmark to its true hot path: coroutine creation, awaitable resolution, resume/suspend, and teardown.
+  - Built a dedicated `coroutines` attribution chain from benchmark source to CPython interpreter helpers to CinderX helper replacements to JIT lowering.
+  - Cross-compiled reduced CPython-vs-CinderX awaitable helper probes with `aarch64-linux-gnu-gcc 15.2.0` and `x86_64-linux-gnu-gcc 15.2.0` and compared the resulting assembly shape.
+  - Wrote a dedicated Chinese deep-dive document for `coroutines` explaining why the Arm/AMD ratio can worsen after switching from CPython to CinderX.
+  - Repeated the same single-benchmark deep-dive flow for `comprehensions`, using the local pyperformance source to map the benchmark to list/dict comprehensions, attribute loads, generator expressions, and tuple-sort setup.
+  - Verified that CinderX replaces interpreter `LIST_APPEND` and `MAP_ADD` with checked-container-capable helpers and that JIT LIR still lowers list/dict writes to those same helpers.
+  - Cross-compiled reduced probes for `dict-or-checked-dict`, `list-or-checked-list`, and `LOAD_ATTR_INSTANCE_VALUE`-style guards to compare AArch64 and x86_64 machine-code shape.
+  - Wrote a dedicated Chinese deep-dive document for `comprehensions` tying those code-shape differences to Arm/AMD ratio degradation.
+  - Wrote a dedicated follow-on execution plan for the remaining benchmarks, grouping them by shared root-cause families and defining the per-benchmark deep-dive deliverables and order of work.
+  - Completed the same benchmark-source -> CPython path -> CinderX delta -> static assembly -> JIT-shape analysis for `richards`.
+  - Verified richards is dominated by tiny helper methods, attribute traffic, and scheduler dispatch rather than arithmetic, making it a strong fit for interpreter bookkeeping regressions.
+  - Cross-compiled reduced probes for tiny-helper bookkeeping and attr-guard expansion and used them to explain why CinderX-specific costs amplify more on AArch64 than on x86_64.
+  - Completed the remaining per-benchmark deep-dive documents for `richards_super`, `go`, `deltablue`, `raytrace`, `nqueens`, `float`, `generators`, and `python_startup`.
+  - Used local pyperformance source plus targeted bytecode inspection to classify the remaining benchmarks into tiny-helper/object-graph, generator/runtime, numeric-JIT, and startup-injection clusters.
+  - Reused and integrated prior branch-local findings for `raytrace`, `float`, and `generators` so the current-branch analysis reflects code that already contains partial benchmark-specific fixes rather than treating those cases as greenfield unknowns.
+  - Wrote a final synthesis document that maps every requested benchmark to its most likely CinderX-vs-CPython root-cause cluster and explains why AArch64 is structurally more exposed than AMD/x86_64 once those CinderX-specific costs are introduced.
+- Files created/modified:
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-arm-amd-cpython-regression-analysis.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-arm-amd-cpython-regression-execution-checklist.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-arm-amd-cpython-regression-minimal-first-pass.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-arm-vs-amd-root-cause-analysis.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-coroutines-arm-vs-amd-deep-dive.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-comprehensions-arm-vs-amd-deep-dive.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-remaining-benchmarks-analysis-plan.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-richards-arm-vs-amd-deep-dive.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-richards_super-arm-vs-amd-deep-dive.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-go-arm-vs-amd-deep-dive.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-deltablue-arm-vs-amd-deep-dive.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-raytrace-arm-vs-amd-deep-dive.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-nqueens-arm-vs-amd-deep-dive.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-float-arm-vs-amd-deep-dive.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-generators-arm-vs-amd-deep-dive.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-python-startup-arm-vs-amd-deep-dive.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-final-benchmark-synthesis.md` (created)
+  - `/Users/luchen/Repo/cinderx/findings.md` (updated)
 
 ## Test Results
 | Test | Input | Expected | Actual | Status |
 |------|-------|----------|--------|--------|
-| N/A | N/A | N/A | N/A | pending |
+| Planning file init | create planning files | Files created successfully | Pending verification in repo | in_progress |
+| Upstream baseline access | create temporary worktree | Detached baseline tree available in `/tmp` | `/tmp/cpython-ebf955` created successfully | pass |
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
 |-----------|-------|---------|------------|
-| 2026-02-25 | `session-catchup.py` missing at default path | 1 | Used installed planning-with-files path under `.codex/planning-with-files/.codex/skills/` |
+| 2026-03-14 | planning-with-files helper script path missing | 1 | Initialized planning files manually |
+| 2026-03-14 | Upstream baseline commit unavailable in `cinderx` history | 1 | Switched to cross-repo diff strategy |
 
 ## 5-Question Reboot Check
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 1 (brainstorming) |
-| Where am I going? | Plan -> TDD -> implementation -> remote verification |
-| What's the goal? | Enable LIGHTWEIGHT_FRAMES on ARM 3.14 with LTO/PGO/adaptive static compatibility |
-| What have I learned? | Existing project already has adaptive static + LTO integration; lightweight frames currently not enabled for 3.14 in setup defaults |
-| What have I done? | Loaded skills, initialized planning docs, started requirement clarification |
+| Where am I? | Phase 4 |
+| Where am I going? | Turn the current plans into diff-point-driven one-click scripts for the isolated Linux Arm environment |
+| What's the goal? | Produce a detailed plan and root-cause-oriented analysis for the listed regressions |
+| What have I learned? | Linux Arm is the only valid performance environment; macOS Arm is useful only for probing and narrowing checks |
+| What have I done? | Built the comparison frame, wrote the Chinese planning docs, and shifted the strategy toward one-click offline data collection |
 
-## Decision Update (2026-02-25)
-- Priority: `ENABLE_LIGHTWEIGHT_FRAMES` must land and validate on Python 3.14 first.
-- Rollout order: 3.14-first; any 3.15 default enablement deferred to next phase after 3.14 verification.
-
-## Session Update: 2026-02-26
-
-### Phase status
-- Phase 1 (brainstorming): complete
-- Phase 2 (writing plan): complete
-- Phase 3 (TDD): complete
-- Phase 4 (integration): complete
-- Phase 5 (verification): complete
-- Phase 6 (delivery): in_progress
-
-### Code changes completed
-- Added `should_enable_lightweight_frames()` in `setup.py` with Stage-A policy:
-  - default on for OSS `3.14` on `aarch64/arm64`
-  - default off for `3.15` (env override still possible)
-  - preserve meta `3.12` behavior
-- Added `_cinderx.is_lightweight_frames_enabled()` and exported `cinderx.is_lightweight_frames_enabled()`.
-- Added/extended tests:
-  - `tests/test_setup_lightweight_frames.py`
-  - `tests/test_cinderx_lightweight_frames_api.py`
-  - `cinderx/PythonLib/test_cinderx/test_oss_quick.py`
-- Added 3.14 compatibility guards for missing 3.15-only `PyUnstable_*JITExecutable*` APIs:
-  - `cinderx/Common/py-portability.h`
-  - `cinderx/Jit/frame.cpp`
-  - `cinderx/Jit/lir/generator.cpp`
-- Added PGO workload retry helper in `setup.py`:
-  - `run_pgo_workload()` retries once on `subprocess.CalledProcessError`
-  - used by `BuildCommand._run_with_pgo()`
-- Added test for retry behavior:
-  - `tests/test_setup_pgo_workload_retries.py`
-
-### Verification run summary (remote only)
-- Entry point: `ssh root@124.70.162.35`
-- Setup and API unit tests: pass
-- `CINDERX_ENABLE_PGO=0 CINDERX_ENABLE_LTO=1 python setup.py install`: pass
-- `CINDERX_ENABLE_PGO=1 CINDERX_ENABLE_LTO=1 python setup.py install`: pass
-- Runtime probes after installs:
-  - `cinderx.is_adaptive_static_python_enabled() -> True`
-  - `cinderx.is_lightweight_frames_enabled() -> True`
-- Smoke:
-  - `python cinderx/PythonLib/test_cinderx/test_oss_quick.py` -> `Ran 3 tests ... OK`
-
+---
+*Update after completing each phase or encountering errors*
