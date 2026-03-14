@@ -4,12 +4,23 @@ import setup
 
 
 class LightweightFramesDefaultTests(unittest.TestCase):
+    def test_disable_for_314_arm64_on_darwin(self) -> None:
+        self.assertFalse(
+            setup.should_enable_lightweight_frames(
+                py_version="3.14",
+                meta_python=False,
+                machine="arm64",
+                sys_platform="darwin",
+            )
+        )
+
     def test_enable_for_314_aarch64(self) -> None:
         self.assertTrue(
             setup.should_enable_lightweight_frames(
                 py_version="3.14",
                 meta_python=False,
                 machine="aarch64",
+                sys_platform="linux",
             )
         )
 
@@ -19,6 +30,7 @@ class LightweightFramesDefaultTests(unittest.TestCase):
                 py_version="3.14",
                 meta_python=False,
                 machine="arm64",
+                sys_platform="linux",
             )
         )
 
@@ -28,6 +40,7 @@ class LightweightFramesDefaultTests(unittest.TestCase):
                 py_version="3.14",
                 meta_python=False,
                 machine="x86_64",
+                sys_platform="linux",
             )
         )
 

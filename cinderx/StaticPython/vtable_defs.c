@@ -693,6 +693,25 @@ __attribute__((used)) _PyClassLoader_StaticCallReturn _PyVTable_thunk_native(
   return return_to_native_typecode(obj, sig->ta_rettype);
 }
 
+#if defined(__APPLE__)
+#if defined(__aarch64__) || defined(_M_ARM64) || defined(_M_X64) || defined(_M_AMD64) || defined(__x86_64__)
+/*
+ * On Mach-O, a C identifier that already starts with '_' ends up exported with
+ * an extra leading underscore in the symbol table. Our naked asm entrypoints
+ * still branch to the single-underscore spelling, so provide a shim with the
+ * exact symbol name the assembler references.
+ */
+_PyClassLoader_StaticCallReturn PyVTable_thunk_native(
+    _PyClassLoader_MethodThunk* thunk,
+    void** args) {
+  return _PyVTable_thunk_native(thunk, args);
+}
+#endif
+#define CI_PYVTABLE_THUNK_NATIVE_ASM_SYMBOL "__PyVTable_thunk_native"
+#else
+#define CI_PYVTABLE_THUNK_NATIVE_ASM_SYMBOL "_PyVTable_thunk_native"
+#endif
+
 #if defined(_M_X64) || defined(_M_AMD64) || defined(__x86_64__)
 __attribute__((naked))
 PyObject* _PyVTable_native_entry(PyObject* state, void** args) {
@@ -712,7 +731,7 @@ PyObject* _PyVTable_native_entry(PyObject* state, void** args) {
       "push %rdx\n"
       "push %rsi\n"
       "mov %rsp, %rsi\n"
-      "call _PyVTable_thunk_native\n"
+      "call " CI_PYVTABLE_THUNK_NATIVE_ASM_SYMBOL "\n"
       /* We don't know if we're returning a floating point value or not */
       /* so we assume we are, and always populate the xmm registers */
       /* even if we don't need to */
@@ -742,7 +761,7 @@ PyObject* _PyVTable_native_entry(PyObject* state, void** args) {
       "stp x7, x9, [sp, #48]\n"
       /* Set x1 to point to the args array */
       "mov x1, sp\n"
-      "bl _PyVTable_thunk_native\n"
+      "bl " CI_PYVTABLE_THUNK_NATIVE_ASM_SYMBOL "\n"
       /* We don't know if we're returning a floating point value or not */
       /* so we assume we are, and always populate the FP registers */
       /* even if we don't need to */

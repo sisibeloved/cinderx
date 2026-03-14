@@ -34,11 +34,15 @@ constexpr size_t kAllocSize = 1024 * 1024 * 2;
 // Allocate memory for JIT'd code.
 uint8_t* allocPages(size_t size) {
 #ifndef WIN32
+  int mmap_flags = MAP_PRIVATE | MAP_ANONYMOUS;
+#if defined(__APPLE__) && defined(MAP_JIT)
+  mmap_flags |= MAP_JIT;
+#endif
   void* res = mmap(
       nullptr,
       size,
       PROT_EXEC | PROT_READ | PROT_WRITE,
-      MAP_PRIVATE | MAP_ANONYMOUS,
+      mmap_flags,
       -1,
       0);
   JIT_CHECK(

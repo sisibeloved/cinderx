@@ -756,6 +756,12 @@ FlagProcessor initFlagProcessor() {
 
   flag_processor.setFlags(PySys_GetXOptions());
 
+#if defined(__APPLE__)
+  if (!flag_processor.hasHandled("jit-huge-pages")) {
+    getMutableConfig().use_huge_pages = false;
+  }
+#endif
+
   // T198250666: Bit of a hack but this makes other things easier.  In 3.12 all
   // functions need access to the runtime PyFunctionObject, which prevents
   // inlining.  Our tests check `is_hir_inliner_enabled()` to see if the inliner

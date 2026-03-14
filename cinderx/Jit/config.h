@@ -139,7 +139,13 @@ struct Config {
   bool compile_all_static_functions{false};
   bool multiple_code_sections{false};
   bool multithreaded_compile_test{false};
-  bool use_huge_pages{true};
+  bool use_huge_pages{
+#ifdef __APPLE__
+      false
+#else
+      true
+#endif
+  };
   // Assume that data found in the Python frame is unchanged across function
   // calls.  This includes the code object, and the globals and builtins
   // dictionaries (but not their contents).

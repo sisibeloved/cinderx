@@ -138,6 +138,7 @@ def should_enable_adaptive_static_python(
     py_version: str,
     meta_python: bool,
     machine: str | None = None,
+    sys_platform: str | None = None,
 ) -> bool:
     if meta_python and py_version == "3.12":
         return True
@@ -145,6 +146,11 @@ def should_enable_adaptive_static_python(
     if machine is None:
         machine = platform.machine()
     machine = machine.lower()
+    if sys_platform is None:
+        sys_platform = sys.platform
+
+    if sys_platform == "darwin":
+        return False
 
     return py_version == "3.14" and machine in {"aarch64", "arm64"}
 
@@ -153,6 +159,7 @@ def should_enable_lightweight_frames(
     py_version: str,
     meta_python: bool,
     machine: str | None = None,
+    sys_platform: str | None = None,
 ) -> bool:
     if meta_python and py_version == "3.12":
         return True
@@ -160,6 +167,11 @@ def should_enable_lightweight_frames(
     if machine is None:
         machine = platform.machine()
     machine = machine.lower()
+    if sys_platform is None:
+        sys_platform = sys.platform
+
+    if sys_platform == "darwin":
+        return False
 
     # Stage A rollout:
     # - keep existing meta 3.12 behavior

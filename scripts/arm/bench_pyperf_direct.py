@@ -7,17 +7,66 @@ import importlib.util
 import inspect
 import json
 import statistics
+import sys
 import time
+import types
 from pathlib import Path
 
 
+def ensure_pyperf_compat() -> None:
+    try:
+        import pyperf  # noqa: F401
+        return
+    except ModuleNotFoundError:
+        pass
+
+    shim = types.ModuleType("pyperf")
+    shim.perf_counter = time.perf_counter
+
+    class Runner:
+        def __init__(self):
+            self.metadata = {}
+
+        def bench_time_func(self, *args, **kwargs):
+            raise RuntimeError("pyperf Runner shim is import-only")
+
+        def bench_func(self, *args, **kwargs):
+            raise RuntimeError("pyperf Runner shim is import-only")
+
+        def bench_command(self, *args, **kwargs):
+            raise RuntimeError("pyperf Runner shim is import-only")
+
+    shim.Runner = Runner
+    sys.modules["pyperf"] = shim
+
+
 def load_module(path: Path, module_name: str):
+    ensure_pyperf_compat()
     spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"failed to load module from {path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def resolve_attr_path(obj, path: str):
+    cur = obj
+    for part in path.split("."):
+        call = part.endswith("()")
+        name = part[:-2] if call else part
+        cur = getattr(cur, name)
+        if call:
+            cur = cur()
+    return cur
+
+
+def json_safe(value):
+    try:
+        json.dumps(value)
+        return value
+    except TypeError:
+        return repr(value)
 
 
 def collect_functions(module):
@@ -106,10 +155,13 @@ def main() -> int:
 
     module_path = Path(args.module_path)
     module = load_module(module_path, args.module_name)
-    bench = getattr(module, args.bench_func)
+    bench = resolve_attr_path(module, args.bench_func)
     bench_args = json.loads(args.bench_args_json)
 
-    import cinderx.jit as jit
+    try:
+        import cinderx.jit as jit
+    except Exception:
+        import cinderjit as jit
 
     jit.enable()
     if args.specialized_opcodes:
@@ -144,7 +196,7 @@ def main() -> int:
         bench_return = bench(*bench_args)
         wall = time.perf_counter() - t0
         stats = jit.get_and_clear_runtime_stats()
-        samples.append({"bench_return_sec": bench_return, "wall_sec": wall})
+        samples.append({"bench_return_sec": json_safe(bench_return), "wall_sec": wall})
         all_deopts.extend(stats.get("deopt", []))
 
     payload = {

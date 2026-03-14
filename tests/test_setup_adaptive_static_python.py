@@ -5,12 +5,23 @@ import setup
 
 
 class AdaptiveStaticDefaultTests(unittest.TestCase):
+    def test_disable_for_314_arm64_on_darwin(self) -> None:
+        self.assertFalse(
+            setup.should_enable_adaptive_static_python(
+                py_version="3.14",
+                meta_python=False,
+                machine="arm64",
+                sys_platform="darwin",
+            )
+        )
+
     def test_enable_for_314_aarch64(self) -> None:
         self.assertTrue(
             setup.should_enable_adaptive_static_python(
                 py_version="3.14",
                 meta_python=False,
                 machine="aarch64",
+                sys_platform="linux",
             )
         )
 
@@ -20,6 +31,7 @@ class AdaptiveStaticDefaultTests(unittest.TestCase):
                 py_version="3.14",
                 meta_python=False,
                 machine="arm64",
+                sys_platform="linux",
             )
         )
 
@@ -29,6 +41,7 @@ class AdaptiveStaticDefaultTests(unittest.TestCase):
                 py_version="3.14",
                 meta_python=False,
                 machine="x86_64",
+                sys_platform="linux",
             )
         )
 

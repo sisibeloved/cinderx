@@ -29,7 +29,11 @@ class CinderXOSSTest(unittest.TestCase):
 
         machine = platform.machine().lower()
         is_meta_312 = "+meta" in sys.version and sys.version_info[:2] == (3, 12)
-        is_314_arm = sys.version_info[:2] == (3, 14) and machine in {"aarch64", "arm64"}
+        is_314_arm = (
+            sys.platform == "linux"
+            and sys.version_info[:2] == (3, 14)
+            and machine in {"aarch64", "arm64"}
+        )
         expected = is_meta_312 or is_314_arm
         if hasattr(cinderx, "is_static_python_enabled") and not cinderx.is_static_python_enabled():
             expected = False
@@ -52,7 +56,11 @@ class CinderXOSSTest(unittest.TestCase):
 
         machine = platform.machine().lower()
         is_meta_312 = "+meta" in sys.version and sys.version_info[:2] == (3, 12)
-        is_314_arm = sys.version_info[:2] == (3, 14) and machine in {"aarch64", "arm64"}
+        is_314_arm = (
+            sys.platform == "linux"
+            and sys.version_info[:2] == (3, 14)
+            and machine in {"aarch64", "arm64"}
+        )
         expected = is_meta_312 or is_314_arm
         self.assertEqual(
             enabled,
@@ -75,6 +83,18 @@ class CinderXOSSTest(unittest.TestCase):
         # disabled at build time.
         if not enabled:
             self.assertFalse(cinderx.is_adaptive_static_python_enabled())
+
+    def test_static_python_disabled_can_still_import_without_vtable_missing_symbol(
+        self,
+    ) -> None:
+        import cinderx
+
+        if cinderx.is_static_python_enabled():
+            self.skipTest("requires ENABLE_STATIC_PYTHON=0 build")
+
+        err = cinderx.get_import_error()
+        if err is not None:
+            self.assertNotIn("_PyVTable_thunk_native", str(err))
 
 
 if __name__ == "__main__":

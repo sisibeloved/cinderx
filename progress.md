@@ -61,6 +61,8 @@
   - Used local pyperformance source plus targeted bytecode inspection to classify the remaining benchmarks into tiny-helper/object-graph, generator/runtime, numeric-JIT, and startup-injection clusters.
   - Reused and integrated prior branch-local findings for `raytrace`, `float`, and `generators` so the current-branch analysis reflects code that already contains partial benchmark-specific fixes rather than treating those cases as greenfield unknowns.
   - Wrote a final synthesis document that maps every requested benchmark to its most likely CinderX-vs-CPython root-cause cluster and explains why AArch64 is structurally more exposed than AMD/x86_64 once those CinderX-specific costs are introduced.
+  - Wrote a dedicated optimization design document that turns the deep-dive root causes into concrete code-change proposals, with per-package rationale, target files, expected post-change behavior, and expected benchmark/platform-ratio gains.
+  - Expanded the design into an implementation-ready plan document with 11 tasks, file-level edit scopes, validation commands, benchmark verification order, and a phased execution strategy.
 - Files created/modified:
   - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-arm-amd-cpython-regression-analysis.md` (created)
   - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-arm-amd-cpython-regression-execution-checklist.md` (created)
@@ -79,6 +81,8 @@
   - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-generators-arm-vs-amd-deep-dive.md` (created)
   - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-python-startup-arm-vs-amd-deep-dive.md` (created)
   - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-final-benchmark-synthesis.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/specs/2026-03-14-arm-amd-ratio-improvement-design.md` (created)
+  - `/Users/luchen/Repo/cinderx/docs/superpowers/plans/2026-03-14-arm-amd-ratio-improvement-implementation-plan.md` (created)
   - `/Users/luchen/Repo/cinderx/findings.md` (updated)
 
 ## Test Results
