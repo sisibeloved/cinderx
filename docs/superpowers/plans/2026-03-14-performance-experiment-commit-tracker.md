@@ -185,16 +185,16 @@ richards 在 macOS Arm 上 speedup=1.0254x，方向正确，建议继续上 Linu
 | 编号 | 状态 | 主题 | commit ID | 实验开关 | 主用例 | 主用例 speed | 主用例 delta | 10用例集 speed | 10用例集 delta | 结论 |
 |---|---|---|---|---|---|---:|---:|---:|---:|---|
 | 001 | 已接受 | 本地 macOS Arm pyperformance JIT smoke path | `5aa24f54` | 无 | `coroutines` smoke | N/A | N/A | N/A | N/A | 基础设施 |
-| 002 | 已拒绝 | Arm exact coroutine awaitable fast path | `N/A` | `PYTHONJITARMCOROFAST=1` | `coroutines` | `0.4037x` | `-59.63%` | `N/A` | `N/A` | 拒绝 |
-| 003 | 计划中 | Arm instance-value aggressive fast path | `N/A` | `PYTHONJITARMINSTANCEFAST=1` | `richards` | `N/A` | `N/A` | `N/A` | `N/A` | 待测 |
-| 004 | 计划中 | Arm instance-value skip-valid fast path | `N/A` | `PYTHONJITARMINSTANCEFASTSKIPVALID=1` | `richards` | `N/A` | `N/A` | `N/A` | `N/A` | 待测 |
-| 005 | 计划中 | Arm tiny numeric leaf fast path | `N/A` | `PYTHONJITARMNUMERICLEAF=1` | `raytrace` | `N/A` | `N/A` | `N/A` | `N/A` | 待测 |
+| 002 | 已拒绝 | Arm exact coroutine awaitable fast path | `N/A` | `PYTHONJIT_ARM_CORO_FAST=1` | `coroutines` | `0.4037x` | `-59.63%` | `N/A` | `N/A` | 拒绝 |
+| 003 | 已拒绝 | Arm instance-value aggressive fast path | `N/A` | `PYTHONJIT_ARM_INSTANCE_FAST=1` | `richards` | `0.3854x` | `-61.46%` | `N/A` | `N/A` | 拒绝 |
+| 004 | 已拒绝 | Arm instance-value skip-valid fast path | `N/A` | `PYTHONJIT_ARM_INSTANCE_FAST_SKIP_VALID=1` | `richards` | `0.4029x` | `-59.71%` | `N/A` | `N/A` | 拒绝 |
+| 005 | 计划中 | Arm tiny numeric leaf fast path | `N/A` | `PYTHONJIT_ARM_NUMERIC_LEAF=1` | `raytrace` | `N/A` | `N/A` | `N/A` | `N/A` | 待测 |
 | 006 | 计划中 | comprehensions correctness fix | `N/A` | 无 | `comprehensions` | `N/A` | `N/A` | `N/A` | `N/A` | correctness |
-| 007 | 已拒绝 | Raytrace float guard relax | `N/A` | `PYTHONJITARMRAYTRACEFLOATGUARDRELAX=1` | `raytrace` | `1.0226x` | `+2.26%` | `0.9505x` | `-4.95%` | 拒绝 |
-| 008 | 进行中 | Raytrace colourAt relax attr guards | `N/A` | `PYTHONJITARMRAYTRACECOLOURATRELAXATTRGUARDS=1` | `raytrace` | `1.0095x` | `+0.95%` | `0.9995x` | `-0.05%` | 继续优化 |
-| 009 | 已拒绝 | Raytrace float+colourAt 组合开关 | `N/A` | `PYTHONJITARMRAYTRACEFLOATGUARDRELAX=1` + `PYTHONJITARMRAYTRACECOLOURATRELAXATTRGUARDS=1` | `raytrace` | `1.0250x` | `+2.50%` | `0.9693x` | `-3.07%` | 拒绝 |
+| 007 | 已拒绝 | Raytrace float guard relax | `N/A` | `PYTHONJIT_ARM_RAYTRACE_FLOAT_GUARD_RELAX=1` | `raytrace` | `1.0226x` | `+2.26%` | `0.9505x` | `-4.95%` | 拒绝 |
+| 008 | 进行中 | Raytrace colourAt relax attr guards | `N/A` | `PYTHONJIT_ARM_RAYTRACE_COLOURAT_RELAX_ATTR_GUARDS=1` | `raytrace` | `1.0095x` | `+0.95%` | `0.9995x` | `-0.05%` | 继续优化 |
+| 009 | 已拒绝 | Raytrace float+colourAt 组合开关 | `N/A` | `PYTHONJIT_ARM_RAYTRACE_FLOAT_GUARD_RELAX=1` + `PYTHONJIT_ARM_RAYTRACE_COLOURAT_RELAX_ATTR_GUARDS=1` | `raytrace` | `1.0250x` | `+2.50%` | `0.9693x` | `-3.07%` | 拒绝 |
 | 010 | 已测量 | Arm generator resume / attr / decref fast path | `N/A` | 无 | `generators` | `N/A` | `N/A` | `N/A` | `N/A` | 分析中 |
-| 011 | 已拒绝 | Arm generator none-truthy specialization | `N/A` | `PYTHONJITARMGENERATORNONETRUTHY=1` | `generators` | `1.0018x` | `+0.18%` | `0.9941x` | `-0.59%` | 拒绝 |
+| 011 | 已拒绝 | Arm generator none-truthy specialization | `N/A` | `PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY=1` | `generators` | `1.0018x` | `+0.18%` | `0.9941x` | `-0.59%` | 拒绝 |
 
 ---
 
@@ -217,7 +217,6 @@ richards 在 macOS Arm 上 speedup=1.0254x，方向正确，建议继续上 Linu
 | 优先级 | 提交编号 | 主题 | 下一步 |
 |---|---:|---|---|
 | P0 | 006 | `comprehensions` correctness fix | 先恢复 benchmark 可测状态 |
-| P1 | 003 | Arm instance-value aggressive fast path | 把 `richards` 的收益来源拆细 |
-| P1 | 004 | Arm instance-value skip-valid fast path | 继续验证 `richards/go/deltablue` |
-| P2 | 008 | Raytrace colourAt relax attr guards | 继续收窄副作用，把 geomean 从 `0.9995x` 推过 `1.0` |
-| P3 | 010 | Arm generator resume / attr / decref fast path | 分析已收束；只有在 `richards` / `raytrace` 方向枯竭后才回来看是否还有新假设 |
+| P1 | 008 | Raytrace colourAt relax attr guards | 继续收窄副作用，把 geomean 从 `0.9995x` 推过 `1.0` |
+| P2 | 006 | `comprehensions` correctness fix | 先恢复 benchmark 可测状态 |
+| P3 | 010 | Arm generator resume / attr / decref fast path | 分析已收束；只有在 `raytrace` 方向枯竭后才回来看是否还有新假设 |
