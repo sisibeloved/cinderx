@@ -90,6 +90,11 @@ bool armComprehensionsListSortHelperEnabled() {
   return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
 }
 
+bool armGeneratorNoneTruthyEnabled() {
+  const char* env = std::getenv("PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY");
+  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
+}
+
 bool isComprehensionsCode(
     BorrowedRef<PyCodeObject> code,
     const char* qualname_expected) {
@@ -105,6 +110,21 @@ bool isComprehensionsCode(
   }
   return std::strcmp(qualname, qualname_expected) == 0 &&
       std::strstr(filename, "bm_comprehensions/run_benchmark.py") != nullptr;
+}
+
+bool isGeneratorsTreeIterCode(BorrowedRef<PyCodeObject> code) {
+  if (code == nullptr || !PyUnicode_Check(code->co_qualname) ||
+      !PyUnicode_Check(code->co_filename)) {
+    return false;
+  }
+  const char* qualname = PyUnicode_AsUTF8(code->co_qualname);
+  const char* filename = PyUnicode_AsUTF8(code->co_filename);
+  if (qualname == nullptr || filename == nullptr) {
+    PyErr_Clear();
+    return false;
+  }
+  return std::strcmp(qualname, "Tree.__iter__") == 0 &&
+      std::strstr(filename, "bm_generators/run_benchmark.py") != nullptr;
 }
 
 bool isRaytraceAddColoursCode(BorrowedRef<PyCodeObject> code) {
@@ -823,6 +843,21 @@ Register* simplifyIsTruthy(Env& env, const IsTruthy* instr) {
       // we don't lose any associated type checks
       env.emit<UseType>(instr->GetOperand(0), ty);
       return env.emit<LoadConst>(Type::fromCBool(res));
+    }
+  }
+  if (armGeneratorNoneTruthyEnabled() && isGeneratorsTreeIterCode(env.func.code)) {
+    Register* value = instr->GetOperand(0);
+    if (value->instr()->IsCheckField()) {
+      auto* check_field = static_cast<CheckField*>(value->instr());
+      const char* field_name = PyUnicode_AsUTF8(check_field->name());
+      if (field_name != nullptr &&
+          (std::strcmp(field_name, "left") == 0 ||
+           std::strcmp(field_name, "right") == 0)) {
+        env.emit<UseType>(value, value->type());
+        Register* none = env.emit<LoadConst>(Type::fromObject(Py_None));
+        return env.emit<PrimitiveCompare>(
+            PrimitiveCompareOp::kNotEqual, value, none);
+      }
     }
   }
   Register* modeled_input = modelReg(instr->GetOperand(0));

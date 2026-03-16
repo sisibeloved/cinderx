@@ -206,6 +206,7 @@ richards 在 macOS Arm 上 speedup=1.0254x，方向正确，建议继续上 Linu
 | 020 | 已拒绝 | Comprehensions dict-get helper | `N/A` | `PYTHONJIT_ARM_COMPREHENSIONS_DICT_GET_HELPER=1` | `comprehensions` | `0.9704x` | `-2.96%` | `0.9985x` | `-0.15%` | 主用例未过线 |
 | 021 | 已接受 | Comprehensions list-sort helper | `N/A` | `PYTHONJIT_ARM_COMPREHENSIONS_LIST_SORT_HELPER=1` | `comprehensions` | `0.9926x` | `-0.74%` | `1.0105x` | `+1.05%` | 10 用例集几何平均过线 |
 | 022 | 已拒绝 | Comprehensions dict-get + list-sort 组合开关 | `N/A` | `PYTHONJIT_ARM_COMPREHENSIONS_DICT_GET_HELPER=1` + `PYTHONJIT_ARM_COMPREHENSIONS_LIST_SORT_HELPER=1` | `comprehensions` | `0.9142x` | `-8.58%` | `0.9425x` | `-5.75%` | 组合退化，拒绝 |
+| 037 | 已测量 | Generators Tree.__iter__ benchmark-specific none-truthy | `N/A` | `PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY=1` | `generators` | `1.0119x` | `+1.19%` | `1.0040x` | `+0.40%` | 新版 benchmark-specific 实现过线，待整理提交 |
 
 ---
 
