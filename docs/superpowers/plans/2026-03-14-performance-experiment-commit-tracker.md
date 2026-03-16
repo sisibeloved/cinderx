@@ -180,30 +180,34 @@ richards 在 macOS Arm 上 speedup=1.0254x，方向正确，建议继续上 Linu
 
 ---
 
-## 实验摘要表
+## 性能开关摘要表
 
-| 编号 | 状态 | 主题 | commit ID | 实验开关 | 主用例 | 主用例 speedup | 主用例 delta | 10用例集几何平均 | 10用例集 delta | 结论 | 备注 |
-|---|---|---|---|---|---|---:|---:|---:|---:|---|---|
-| 001 | 已接受 | 本地 macOS Arm pyperformance JIT smoke path | `5aa24f54` | 无 | `coroutines` smoke | N/A | N/A | N/A | N/A | 保留 | 基础设施提交，不以性能收益为目标 |
-| 002 | 已拒绝 | Arm exact coroutine awaitable fast path | `N/A` | `PYTHONJITARMCOROFAST=1` | `coroutines` | `0.4037x` | `-59.63%` | `N/A` | `N/A` | 不保留 | 主用例已明显负收益，未进入固定全量集 gate |
-| 003 | 计划中 | Arm instance-value aggressive fast path | `N/A` | `PYTHONJITARMINSTANCEFAST=1` | `richards` | `N/A` | `N/A` | `N/A` | `N/A` | 待测 | 单开关结果未收敛 |
-| 004 | 计划中 | Arm instance-value skip-valid fast path | `N/A` | `PYTHONJITARMINSTANCEFASTSKIPVALID=1` | `richards` | `N/A` | `N/A` | `N/A` | `N/A` | 待测 | 与 003 分开看 |
-| 005 | 计划中 | Arm tiny numeric leaf fast path | `N/A` | `PYTHONJITARMNUMERICLEAF=1` | `raytrace` | `N/A` | `N/A` | `N/A` | `N/A` | 待测 | 优先看 `raytrace` |
-| 006 | 计划中 | comprehensions correctness fix | `N/A` | 无 | `comprehensions` | `N/A` | `N/A` | `N/A` | `N/A` | 待测 | correctness gate，不是性能提交 |
-| 007 | 已拒绝 | Raytrace float guard relax | `N/A` | `PYTHONJITARMRAYTRACEFLOATGUARDRELAX=1` | `raytrace` | `N/A` | `N/A` | `0.9505x` | `-4.95%` | 不保留 | 几何平均未过线 |
-| 008 | 进行中 | Raytrace colourAt relax attr guards | `N/A` | `PYTHONJITARMRAYTRACECOLOURATRELAXATTRGUARDS=1` | `raytrace` | `N/A` | `N/A` | `0.9995x` | `-0.05%` | 继续优化 | 最接近提交线 |
-| 009 | 已拒绝 | Raytrace float+colourAt 组合开关 | `N/A` | `PYTHONJITARMRAYTRACEFLOATGUARDRELAX=1` + `PYTHONJITARMRAYTRACECOLOURATRELAXATTRGUARDS=1` | `raytrace` | `1.0250x` | `+2.50%` | `0.9693x` | `-3.07%` | 不保留 | 主用例有收益，但整体回退明显 |
-| 010 | 已测量 | Arm generator resume / attr / decref fast path | `N/A` | 无 | `generators` | `N/A` | `N/A` | `N/A` | `N/A` | 保留分析结论 | 分析项，不是性能开关 |
-| 011 | 已拒绝 | Arm generator none-truthy specialization | `N/A` | `PYTHONJITARMGENERATORNONETRUTHY=1` | `generators` | `1.0018x` | `+0.18%` | `0.9941x` | `-0.59%` | 不保留性能代码 | 结构命中，但整体未过线 |
+| 编号 | 状态 | 主题 | commit ID | 实验开关 | 主用例 | 主用例 speed | 主用例 delta | 10用例集 speed | 10用例集 delta | 结论 |
+|---|---|---|---|---|---|---:|---:|---:|---:|---|
+| 001 | 已接受 | 本地 macOS Arm pyperformance JIT smoke path | `5aa24f54` | 无 | `coroutines` smoke | N/A | N/A | N/A | N/A | 基础设施 |
+| 002 | 已拒绝 | Arm exact coroutine awaitable fast path | `N/A` | `PYTHONJITARMCOROFAST=1` | `coroutines` | `0.4037x` | `-59.63%` | `N/A` | `N/A` | 拒绝 |
+| 003 | 计划中 | Arm instance-value aggressive fast path | `N/A` | `PYTHONJITARMINSTANCEFAST=1` | `richards` | `N/A` | `N/A` | `N/A` | `N/A` | 待测 |
+| 004 | 计划中 | Arm instance-value skip-valid fast path | `N/A` | `PYTHONJITARMINSTANCEFASTSKIPVALID=1` | `richards` | `N/A` | `N/A` | `N/A` | `N/A` | 待测 |
+| 005 | 计划中 | Arm tiny numeric leaf fast path | `N/A` | `PYTHONJITARMNUMERICLEAF=1` | `raytrace` | `N/A` | `N/A` | `N/A` | `N/A` | 待测 |
+| 006 | 计划中 | comprehensions correctness fix | `N/A` | 无 | `comprehensions` | `N/A` | `N/A` | `N/A` | `N/A` | correctness |
+| 007 | 已拒绝 | Raytrace float guard relax | `N/A` | `PYTHONJITARMRAYTRACEFLOATGUARDRELAX=1` | `raytrace` | `1.0226x` | `+2.26%` | `0.9505x` | `-4.95%` | 拒绝 |
+| 008 | 进行中 | Raytrace colourAt relax attr guards | `N/A` | `PYTHONJITARMRAYTRACECOLOURATRELAXATTRGUARDS=1` | `raytrace` | `1.0095x` | `+0.95%` | `0.9995x` | `-0.05%` | 继续优化 |
+| 009 | 已拒绝 | Raytrace float+colourAt 组合开关 | `N/A` | `PYTHONJITARMRAYTRACEFLOATGUARDRELAX=1` + `PYTHONJITARMRAYTRACECOLOURATRELAXATTRGUARDS=1` | `raytrace` | `1.0250x` | `+2.50%` | `0.9693x` | `-3.07%` | 拒绝 |
+| 010 | 已测量 | Arm generator resume / attr / decref fast path | `N/A` | 无 | `generators` | `N/A` | `N/A` | `N/A` | `N/A` | 分析中 |
+| 011 | 已拒绝 | Arm generator none-truthy specialization | `N/A` | `PYTHONJITARMGENERATORNONETRUTHY=1` | `generators` | `1.0018x` | `+0.18%` | `0.9941x` | `-0.59%` | 拒绝 |
 
 ---
 
 ## 原始数据说明
 
 - 主视图只保留“一个开关或一组开关一行”的摘要结果
-- 主用例 `speedup/delta` 用于判断这个开关是否命中目标 benchmark
-- `10用例集几何平均/delta` 用于决定该开关是否达到提交门槛
-- 未达到优化标准或未完成固定全量集测试的条目，统一填 `N/A`
+- 主视图只保留两组核心指标：
+  - 主用例 `speed/delta`
+  - `10用例集 speed/delta`
+- 主用例 `speed/delta` 用于判断这个开关是否命中目标 benchmark
+- `10用例集 speed/delta` 用于决定该开关是否达到提交门槛
+- `commit ID` 只在满足提交门槛并实际形成提交时填写
+- 未达到优化标准、尚未形成提交、或未完成固定全量集测试的条目，`commit ID` 与未完成指标统一填 `N/A`
 - 逐 benchmark 的原始实验数据不再放在主视图里，保留在相关分析文档与实验记录中
 
 ---
