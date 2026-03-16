@@ -180,39 +180,31 @@ richards 在 macOS Arm 上 speedup=1.0254x，方向正确，建议继续上 Linu
 
 ---
 
-## 提交主表
+## 实验摘要表
 
-| 编号 | 状态 | 类型 | 主题 | 提交 | 父提交 | 改动范围 | 实验开关 | 目标用例 | 假设 | macOS Arm 结果 | Linux Arm 结果 | 相对前一 CinderX 基线 | 相对基准 CPython | 结论 | 备注 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---:|---:|---|---|
-| 001 | 已接受 | `infra` | 本地 macOS Arm pyperformance JIT smoke path | `5aa24f54` | `f551f1db` | `setup.py`, `cinderx/StaticPython/vtable_defs.c`, `cinderx/Jit/*`, `scripts/arm/*` | 无 | `coroutines` smoke、本地 JIT 可用性 | 修复 Darwin `_PyVTable_thunk_native` 符号链和 JIT code allocator 后，本地 macOS Arm 可以稳定跑 JIT smoke benchmark | `import cinderx` 成功，`coroutines` smoke 跑通，`compiled_count=2` | 待补 | N/A | N/A | 保留 | 这是实验基础设施提交，不以 speedup 为目标 |
-| 002 | 已拒绝 | `perf-single` | Arm exact coroutine awaitable fast path | 待定 | `5aa24f54` | `cinderx/Jit/hir/builder.cpp`, `cinderx/Interpreter/3.14/ceval.h` | `PYTHONJITARMCOROFAST=1` | `coroutines`、部分 `generators` | exact coroutine 形状应绕过通用 awaitable helper，缩短 Arm 上 helper/branch 链 | 本地筛选为负收益，实验代码已撤回 | 待补 | N/A | 待补 | 不保留 | 当前本地 `coroutines` 为 `0.4037x`，不值得继续 |
-| 003 | 计划中 | `perf-single` | Arm instance-value aggressive fast path | 待定 | `5aa24f54` | `cinderx/Jit/hir/builder.cpp` | `PYTHONJITARMINSTANCEFAST=1` | `richards`、`go`、`deltablue`、`comprehensions` | low-local exact instance-value 形状应更多落到 field access，而不是 cached attr helper | 待跑 | 待跑 | 待补 | 待补 | 待定 | 可先和 skip-valid 分开测 |
-| 004 | 计划中 | `perf-single` | Arm instance-value skip-valid fast path | 待定 | `5aa24f54` | `cinderx/Jit/hir/builder.cpp`, interpreter attr fast path | `PYTHONJITARMINSTANCEFASTSKIPVALID=1` | `richards`、`go`、`deltablue` | 跳过 inline-values valid guard 可降低 Arm 上额外 guard 和地址生成成本 | 待跑 | 待跑 | 待补 | 待补 | 待定 | 需要重点盯 correctness |
-| 005 | 计划中 | `perf-single` | Arm tiny numeric leaf fast path | 待定 | `5aa24f54` | `cinderx/Jit/hir/builder.cpp`, numeric lowering | `PYTHONJITARMNUMERICLEAF=1` | `raytrace`、`float`、部分 `nqueens` | tiny numeric leaf 上减少 mixed-numeric guard 和 helper glue，Arm 收益应大于 x86 | 待跑 | 待跑 | 待补 | 待补 | 待定 | 优先看 `raytrace` |
-| 006 | 计划中 | `fix` | comprehensions correctness fix | 待定 | `5aa24f54` | 待定 | 无 | `comprehensions` | 先修复当前 `TypeError: 'int' object is not an iterator`，恢复可测状态 | 待跑 | 待跑 | N/A | N/A | 待定 | 这是 correctness gate，不应和性能提交混合 |
-| 007 | 已拒绝 | `perf-single` | Raytrace float guard relax | 待定 | `5aa24f54` | `cinderx/Jit/hir/builder.cpp`, `cinderx/Jit/config.h`, `cinderx/Jit/pyjit.cpp` | `PYTHONJITARMRAYTRACEFLOATGUARDRELAX=1` | `raytrace` | 放宽 `Vector.dot/Vector.scale` 的 tiny float guard，期望在 Arm 上减少 numeric leaf 成本 | 单开对 `raytrace` 有过正向信号，但跨 10 个 benchmark 的 geomean 为 `0.9505x` | 待补 | `0.9505x` | 待补 | 不保留 | `comprehensions` / `deltablue` / `nqueens` 回退明显 |
-| 008 | 进行中 | `perf-single` | Raytrace colourAt relax attr guards | 待定 | `5aa24f54` | `cinderx/Jit/hir/builder.cpp`, `cinderx/Jit/config.h`, `cinderx/Jit/pyjit.cpp` | `PYTHONJITARMRAYTRACECOLOURATRELAXATTRGUARDS=1` | `raytrace` | 避免 `SimpleSurface.colourAt` 的 specialized instance-value path 在非目标形状上反复 deopt | 单开 geomean 为 `0.9995x`，最接近可提交线 | 待补 | `0.9995x` | 待补 | 继续优化 | 当前是最接近 `>1.0` gate 的实验开关 |
-| 009 | 已拒绝 | `perf-combo` | Raytrace float+colourAt 组合开关 | 待定 | `5aa24f54` | `cinderx/Jit/hir/builder.cpp`, `cinderx/Jit/config.h`, `cinderx/Jit/pyjit.cpp` | `PYTHONJITARMRAYTRACEFLOATGUARDRELAX=1` + `PYTHONJITARMRAYTRACECOLOURATRELAXATTRGUARDS=1` | `raytrace` | 组合后应同时压 numeric leaf 和 `colourAt` 成本 | `raytrace` 可到 `1.0250x`，但跨 10 个 benchmark 的 geomean 为 `0.9693x` | 待补 | `0.9693x` | 待补 | 不保留 | 组合收益无法覆盖其它用例回退 |
-| 010 | 已测量 | `analysis` | Arm generator resume / attr / decref fast path | 待定 | `5aa24f54` | `docs/superpowers/plans/2026-03-16-generators-initial-analysis.md` | 无 | `generators` | 先确认 compile coverage、resume、`yield from`、`decref` 谁才是真正瓶颈 | 已确认 `Tree.__iter__` 实际已编译；`bb_count=43`；`compiled_size=2736`；`yield from` / local reuse 上界实验均未形成可提交方向 | 待补 | N/A | 待补 | 保留分析结论 | 这是分析记录，不是性能提交 |
-| 011 | 已拒绝 | `perf-single` | Arm generator none-truthy specialization | 待定 | `5aa24f54` | `cinderx/Jit/hir/simplify.cpp`, `cinderx/PythonLib/test_cinderx/test_jit_generators_experiments.py` | `PYTHONJITARMGENERATORNONETRUTHY=1` | `generators`、部分 `coroutines` | 把 generator `__iter__` 中 `if self.left/right` 的 truthiness 收窄成 `is not None` 风格分支，减少 `IsTruthy`/`Decref`/代码体积 | 结构命中，`generators` 本地可到 `1.0097x`，但固定全量集几何平均仅 `0.9941x` | 待补 | `0.9941x` | 待补 | 不保留性能代码 | 允许提交跟踪表与分析文档，不允许提交该开关代码 |
+| 编号 | 状态 | 主题 | commit ID | 实验开关 | 主用例 | 主用例 speedup | 主用例 delta | 10用例集几何平均 | 10用例集 delta | 结论 | 备注 |
+|---|---|---|---|---|---|---:|---:|---:|---:|---|---|
+| 001 | 已接受 | 本地 macOS Arm pyperformance JIT smoke path | `5aa24f54` | 无 | `coroutines` smoke | N/A | N/A | N/A | N/A | 保留 | 基础设施提交，不以性能收益为目标 |
+| 002 | 已拒绝 | Arm exact coroutine awaitable fast path | `N/A` | `PYTHONJITARMCOROFAST=1` | `coroutines` | `0.4037x` | `-59.63%` | `N/A` | `N/A` | 不保留 | 主用例已明显负收益，未进入固定全量集 gate |
+| 003 | 计划中 | Arm instance-value aggressive fast path | `N/A` | `PYTHONJITARMINSTANCEFAST=1` | `richards` | `N/A` | `N/A` | `N/A` | `N/A` | 待测 | 单开关结果未收敛 |
+| 004 | 计划中 | Arm instance-value skip-valid fast path | `N/A` | `PYTHONJITARMINSTANCEFASTSKIPVALID=1` | `richards` | `N/A` | `N/A` | `N/A` | `N/A` | 待测 | 与 003 分开看 |
+| 005 | 计划中 | Arm tiny numeric leaf fast path | `N/A` | `PYTHONJITARMNUMERICLEAF=1` | `raytrace` | `N/A` | `N/A` | `N/A` | `N/A` | 待测 | 优先看 `raytrace` |
+| 006 | 计划中 | comprehensions correctness fix | `N/A` | 无 | `comprehensions` | `N/A` | `N/A` | `N/A` | `N/A` | 待测 | correctness gate，不是性能提交 |
+| 007 | 已拒绝 | Raytrace float guard relax | `N/A` | `PYTHONJITARMRAYTRACEFLOATGUARDRELAX=1` | `raytrace` | `N/A` | `N/A` | `0.9505x` | `-4.95%` | 不保留 | 几何平均未过线 |
+| 008 | 进行中 | Raytrace colourAt relax attr guards | `N/A` | `PYTHONJITARMRAYTRACECOLOURATRELAXATTRGUARDS=1` | `raytrace` | `N/A` | `N/A` | `0.9995x` | `-0.05%` | 继续优化 | 最接近提交线 |
+| 009 | 已拒绝 | Raytrace float+colourAt 组合开关 | `N/A` | `PYTHONJITARMRAYTRACEFLOATGUARDRELAX=1` + `PYTHONJITARMRAYTRACECOLOURATRELAXATTRGUARDS=1` | `raytrace` | `1.0250x` | `+2.50%` | `0.9693x` | `-3.07%` | 不保留 | 主用例有收益，但整体回退明显 |
+| 010 | 已测量 | Arm generator resume / attr / decref fast path | `N/A` | 无 | `generators` | `N/A` | `N/A` | `N/A` | `N/A` | 保留分析结论 | 分析项，不是性能开关 |
+| 011 | 已拒绝 | Arm generator none-truthy specialization | `N/A` | `PYTHONJITARMGENERATORNONETRUTHY=1` | `generators` | `1.0018x` | `+0.18%` | `0.9941x` | `-0.59%` | 不保留性能代码 | 结构命中，但整体未过线 |
 
 ---
 
-## Benchmark 结果明细表
+## 原始数据说明
 
-| 运行编号 | 提交编号 | 提交 | 平台 | 对照对象 | 用例 | 模式 | samples | prewarm | baseline median (s) | candidate median (s) | speedup | delta % | 命令 | 备注 |
-|---|---:|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---|---|
-| `mac-smoke-001` | 001 | `5aa24f54` | `macos-arm` | `prev-cinderx` | `coroutines` | `baseline` | 1 | 0 | N/A | `0.0257616250` | N/A | N/A | `scripts/arm/run_local_pyperf_matrix.py --benchmark coroutines --mode baseline --samples 1 --prewarm-runs 0` | smoke only, `compiled_count=2` |
-| `mac-exp-001` | 002 | 待定 | `macos-arm` | `prev-cinderx` | `coroutines` | `baseline -> arm_coro_fast` | 5 | 2 | `0.06438825` | `0.06620771` | `0.9725x` | `-2.75%` | 本地 quick experiment | 当前这轮未复现收益 |
-| `mac-exp-002` | 002 | 待定 | `macos-arm` | `prev-cinderx` | `coroutines` | `baseline -> arm_all_experiments` | 5 | 2 | `0.06438825` | `0.06479429` | `0.9937x` | `-0.63%` | 本地 quick experiment | 基本持平偏慢 |
-| `mac-exp-003` | 004 | 待定 | `macos-arm` | `prev-cinderx` | `richards` | `baseline -> arm_instance_skip_valid` | 5 | 2 | `0.02804500` | `0.02788358` | `1.0058x` | `+0.58%` | 本地 quick experiment | 有微弱正向信号 |
-| `mac-exp-004` | 003/004/005 组合 | 待定 | `macos-arm` | `prev-cinderx` | `richards` | `baseline -> arm_all_experiments` | 5 | 2 | `0.02804500` | `0.02734913` | `1.0254x` | `+2.54%` | 本地 quick experiment | 说明这组开关值得继续拆分 |
-| `mac-exp-005` | 007 | 待定 | `macos-arm` | `prev-cinderx` | `raytrace` | `baseline -> PYTHONJITARMRAYTRACEFLOATGUARDRELAX=1` | 10 | 3 | 见该组明细 | 见该组明细 | `0.9505x` | `-4.95%` | 顺序测 10 个 benchmark，取几何平均 | 单开不满足提交 gate |
-| `mac-exp-006` | 008 | 待定 | `macos-arm` | `prev-cinderx` | `raytrace` | `baseline -> PYTHONJITARMRAYTRACECOLOURATRELAXATTRGUARDS=1` | 10 | 3 | 见该组明细 | 见该组明细 | `0.9995x` | `-0.05%` | 顺序测 10 个 benchmark，取几何平均 | 最接近提交线 |
-| `mac-exp-007` | 009 | 待定 | `macos-arm` | `prev-cinderx` | `raytrace` | `baseline -> float_guard_relax + colourAt_relax_attr_guards` | 10 | 3 | 见该组明细 | 见该组明细 | `0.9693x` | `-3.07%` | 顺序测 10 个 benchmark，取几何平均 | 组合不可提交 |
-| `mac-exp-008` | 010 | 待定 | `macos-arm` | `prev-cinderx` | `generators` | `baseline` | 5 | 1 | N/A | `0.10902658` | N/A | N/A | `bench_pyperf_direct.py --module-path .../bm_generators/run_benchmark.py --bench-func bench_generators --bench-args-json '[1]'` | `compiled_count=3`，compiled qualnames 不含 `Tree.__iter__` |
-| `mac-exp-009` | 011 | 待定 | `macos-arm` | `prev-cinderx` | `generators` | `baseline -> PYTHONJITARMGENERATORNONETRUTHY=1` | 7 | 2 | `0.10491450` | `0.10472683` | `1.0018x` | `+0.18%` | `bench_pyperf_direct.py --module-path .../bm_generators/run_benchmark.py --bench-func bench_generators --bench-args-json '[1]' --samples 7 --prewarm-runs 2` | 目标 benchmark 自身轻微正收益 |
-| `mac-exp-010` | 011 | 待定 | `macos-arm` | `prev-cinderx` | `fixed-suite geom mean` | `baseline -> PYTHONJITARMGENERATORNONETRUTHY=1` | 10 benchmarks | 5/2 | 见各 benchmark | 见各 benchmark | `0.9941x` | `-0.59%` | 固定全量集顺序测：`coroutines/comprehensions/richards/richards_super/go/deltablue/raytrace/nqueens/float/generators` | 未达到提交门槛 |
+- 主视图只保留“一个开关或一组开关一行”的摘要结果
+- 主用例 `speedup/delta` 用于判断这个开关是否命中目标 benchmark
+- `10用例集几何平均/delta` 用于决定该开关是否达到提交门槛
+- 未达到优化标准或未完成固定全量集测试的条目，统一填 `N/A`
+- 逐 benchmark 的原始实验数据不再放在主视图里，保留在相关分析文档与实验记录中
 
 ---
 
