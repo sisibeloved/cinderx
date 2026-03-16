@@ -48,7 +48,7 @@ class LocalPyperfDriverTests(unittest.TestCase):
                 "ENABLE_STATIC_PYTHON": "0",
                 "ENABLE_ADAPTIVE_STATIC_PYTHON": "0",
                 "ENABLE_LIGHTWEIGHT_FRAMES": "0",
-                "PYTHONJITARMCOROFAST": "1",
+                "PYTHONJIT_ARM_CORO_FAST": "1",
             },
         )
 

@@ -348,6 +348,11 @@ bool codeHasBackedge(BorrowedRef<PyCodeObject> code) {
   return false;
 }
 
+bool armPolymorphicSelfNoInstanceValueEnabled() {
+  const char* env = std::getenv("PYTHONJIT_ARM_POLYMORPHIC_SELF_NO_INSTANCE_VALUE");
+  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
+}
+
 } // namespace
 
 // Allocate a temp register that may be used for the stack. It should not be a
@@ -3022,6 +3027,11 @@ void HIRBuilder::emitLoadAttr(
 #if PY_VERSION_HEX >= 0x030E0000
       case LOAD_ATTR_INSTANCE_VALUE: {
         if (code_->co_nlocals < instance_value_min_locals()) {
+          break;
+        }
+        if (
+            armPolymorphicSelfNoInstanceValueEnabled() &&
+            !preloader_.inferredSelfType().has_value()) {
           break;
         }
         BorrowedRef<PyUnicodeObject> name =

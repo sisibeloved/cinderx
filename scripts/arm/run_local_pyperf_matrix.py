@@ -73,26 +73,26 @@ def build_mode_env(mode: str) -> dict[str, str]:
     if mode == "baseline":
         return env
     if mode == "arm_coro_fast":
-        env["PYTHONJITARMCOROFAST"] = "1"
+        env["PYTHONJIT_ARM_CORO_FAST"] = "1"
         return env
     if mode == "arm_instance_fast":
-        env["PYTHONJITARMINSTANCEFAST"] = "1"
+        env["PYTHONJIT_ARM_INSTANCE_FAST"] = "1"
         return env
     if mode == "arm_instance_skip_valid":
-        env["PYTHONJITARMINSTANCEFAST"] = "1"
-        env["PYTHONJITARMINSTANCEFASTSKIPVALID"] = "1"
-        env["PYTHONCINDERXINSTANCEVALUESKIPVALID"] = "1"
+        env["PYTHONJIT_ARM_INSTANCE_FAST"] = "1"
+        env["PYTHONJIT_ARM_INSTANCE_FAST_SKIP_VALID"] = "1"
+        env["PYTHON_CINDERX_INSTANCE_VALUE_SKIP_VALID"] = "1"
         return env
     if mode == "arm_numeric_leaf":
-        env["PYTHONJITARMNUMERICLEAF"] = "1"
+        env["PYTHONJIT_ARM_NUMERIC_LEAF"] = "1"
         return env
     if mode == "arm_all_experiments":
-        env["PYTHONJITARMCOROFAST"] = "1"
-        env["PYTHONJITARMINSTANCEFAST"] = "1"
-        env["PYTHONJITARMINSTANCEFASTSKIPVALID"] = "1"
-        env["PYTHONCINDERXINSTANCEVALUESKIPVALID"] = "1"
-        env["PYTHONJITARMNUMERICLEAF"] = "1"
-        env["PYTHONJITARMGENFAST"] = "1"
+        env["PYTHONJIT_ARM_CORO_FAST"] = "1"
+        env["PYTHONJIT_ARM_INSTANCE_FAST"] = "1"
+        env["PYTHONJIT_ARM_INSTANCE_FAST_SKIP_VALID"] = "1"
+        env["PYTHON_CINDERX_INSTANCE_VALUE_SKIP_VALID"] = "1"
+        env["PYTHONJIT_ARM_NUMERIC_LEAF"] = "1"
+        env["PYTHONJIT_ARM_GEN_FAST"] = "1"
         return env
     raise KeyError(f"unsupported mode: {mode}")
 
