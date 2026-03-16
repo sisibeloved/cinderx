@@ -1136,6 +1136,12 @@ JitEligibility getCompilationEligibility(BorrowedRef<PyFunctionObject> func) {
     return JitEligibility::Ineligible;
   }
 
+  if (auto no_jit_list = cinderx::getModuleState()->no_jit_list.get()) {
+    if (no_jit_list->lookupFunc(func) == 1) {
+      return JitEligibility::Ineligible;
+    }
+  }
+
   // Note: This is not the same as fetching the function's code object and
   // checking its module and qualname, as functions can be renamed after they
   // are created.  Code objects cannot.
@@ -1166,6 +1172,13 @@ JitEligibility getCompilationEligibility(
 
   if (!hasRequiredFlags(code)) {
     return JitEligibility::Ineligible;
+  }
+
+  if (auto no_jit_list = cinderx::getModuleState()->no_jit_list.get()) {
+    if (no_jit_list->lookupCode(code) == 1 ||
+        no_jit_list->lookupName(module_name, code->co_qualname) == 1) {
+      return JitEligibility::Ineligible;
+    }
   }
 
   if (auto jit_list = cinderx::getModuleState()->jit_list.get()) {
@@ -1966,6 +1979,14 @@ PyObject* get_jit_list(PyObject* /* self */, PyObject*) {
   Py_RETURN_NONE;
 }
 
+PyObject* get_nojit_list(PyObject* /* self */, PyObject*) {
+  if (auto no_jit_list = cinderx::getModuleState()->no_jit_list.get()) {
+    return no_jit_list->getList().release();
+  }
+
+  Py_RETURN_NONE;
+}
+
 // Create a new JIT list if one doesn't exist yet, returning true if a new list
 // was made.
 bool ensureJitList() {
@@ -1984,6 +2005,24 @@ bool ensureJitList() {
 
 void deleteJitList() {
   cinderx::getModuleState()->jit_list = nullptr;
+}
+
+bool ensureNoJitList() {
+  if (cinderx::getModuleState()->no_jit_list.get() != nullptr) {
+    return false;
+  }
+  std::unique_ptr<JITList> no_jit_list;
+  if (getConfig().allow_jit_list_wildcards) {
+    no_jit_list = WildcardJITList::create();
+  } else {
+    no_jit_list = JITList::create();
+  }
+  cinderx::getModuleState()->no_jit_list = std::move(no_jit_list);
+  return true;
+}
+
+void deleteNoJitList() {
+  cinderx::getModuleState()->no_jit_list = nullptr;
 }
 
 // Reschedule all functions on the JIT list for compilation.  Run when the JIT
@@ -2041,6 +2080,37 @@ PyObject* append_jit_list(PyObject* /* self */, PyObject* arg) {
   Py_RETURN_NONE;
 }
 
+PyObject* append_nojit_list(PyObject* /* self */, PyObject* arg) {
+  if (!PyUnicode_Check(arg)) {
+    PyErr_Format(
+        PyExc_TypeError,
+        "append_nojit_list expected a file path string, received '%s' object",
+        Py_TYPE(arg)->tp_name);
+    return nullptr;
+  }
+
+  Py_ssize_t line_len;
+  const char* line_str = PyUnicode_AsUTF8AndSize(arg, &line_len);
+  if (line_str == nullptr) {
+    return nullptr;
+  }
+  std::string_view line{
+      line_str, static_cast<std::string::size_type>(line_len)};
+
+  bool new_list = ensureNoJitList();
+  auto no_jit_list = cinderx::getModuleState()->no_jit_list.get();
+  if (!no_jit_list->parseLine(line)) {
+    if (new_list) {
+      deleteNoJitList();
+    }
+    PyErr_Format(
+        PyExc_RuntimeError, "Failed to parse new no-JIT list line %U", arg);
+    return nullptr;
+  }
+
+  Py_RETURN_NONE;
+}
+
 PyObject* read_jit_list(PyObject* /* self */, PyObject* arg) {
   if (!PyUnicode_Check(arg)) {
     PyErr_Format(
@@ -2073,6 +2143,36 @@ PyObject* read_jit_list(PyObject* /* self */, PyObject* arg) {
   }
 
   if (rescheduleJitList() < 0) {
+    return nullptr;
+  }
+
+  Py_RETURN_NONE;
+}
+
+PyObject* read_nojit_list(PyObject* /* self */, PyObject* arg) {
+  if (!PyUnicode_Check(arg)) {
+    PyErr_Format(
+        PyExc_TypeError,
+        "read_nojit_list expected a file path string, received '%s' object",
+        Py_TYPE(arg)->tp_name);
+    return nullptr;
+  }
+
+  const char* path = PyUnicode_AsUTF8(arg);
+  if (path == nullptr) {
+    return nullptr;
+  }
+
+  bool new_list = ensureNoJitList();
+  auto no_jit_list = cinderx::getModuleState()->no_jit_list.get();
+  try {
+    no_jit_list->parseFile(path);
+  } catch (const std::exception& exn) {
+    if (new_list) {
+      deleteNoJitList();
+    }
+
+    PyErr_SetString(PyExc_RuntimeError, exn.what());
     return nullptr;
   }
 
@@ -2929,14 +3029,26 @@ PyMethodDef jit_methods[] = {
      get_jit_list,
      METH_NOARGS,
      PyDoc_STR("Get the list of functions to JIT compile.")},
+    {"get_nojit_list",
+     get_nojit_list,
+     METH_NOARGS,
+     PyDoc_STR("Get the list of functions forbidden from JIT compilation.")},
     {"append_jit_list",
      append_jit_list,
      METH_O,
      PyDoc_STR("Parse a JIT-list line and append it.")},
+    {"append_nojit_list",
+     append_nojit_list,
+     METH_O,
+     PyDoc_STR("Parse a no-JIT-list line and append it.")},
     {"read_jit_list",
      read_jit_list,
      METH_O,
      PyDoc_STR("Read a JIT list file and apply it.")},
+    {"read_nojit_list",
+     read_nojit_list,
+     METH_O,
+     PyDoc_STR("Read a no-JIT list file and apply it.")},
     {"print_hir",
      print_hir,
      METH_O,

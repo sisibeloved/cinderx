@@ -18,6 +18,7 @@ try:
     from cinderjit import (
         _deopt_gen,
         append_jit_list,
+        append_nojit_list,
         auto,
         clear_runtime_stats,
         compile_after_n_calls,
@@ -45,6 +46,7 @@ try:
         get_function_hir_opcode_counts,
         get_inlined_functions_stats,
         get_jit_list,
+        get_nojit_list,
         get_num_inlined_functions,
         is_enabled,
         is_hir_inliner_enabled,
@@ -58,6 +60,7 @@ try:
         page_in_profiler_dependencies,
         precompile_all,
         read_jit_list,
+        read_nojit_list,
         set_max_code_size,
     )
 
@@ -74,6 +77,9 @@ except ImportError:
         return False
 
     def append_jit_list(entry: str) -> None:
+        return None
+
+    def append_nojit_list(entry: str) -> None:
         return None
 
     def auto() -> None:
@@ -161,6 +167,11 @@ except ImportError:
     def get_jit_list() -> tuple[dict[str, set[str]], dict[str, dict[str, set[int]]]]:
         return ({}, {})
 
+    def get_nojit_list() -> tuple[
+        dict[str, set[str]], dict[str, dict[str, set[int]]]
+    ]:
+        return ({}, {})
+
     def get_num_inlined_functions(func: FuncAny) -> int:
         return 0
 
@@ -198,6 +209,9 @@ except ImportError:
         return False
 
     def read_jit_list(path: str) -> None:
+        return None
+
+    def read_nojit_list(path: str) -> None:
         return None
 
     def set_max_code_size(max_code_size: int) -> None:

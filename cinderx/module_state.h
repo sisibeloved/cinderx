@@ -44,6 +44,7 @@ struct ModuleState {
   std::unique_ptr<jit::ISymbolizer> symbolizer;
   std::unique_ptr<jit::IJitContext> jit_context;
   std::unique_ptr<jit::IJITList> jit_list;
+  std::unique_ptr<jit::IJITList> no_jit_list;
   std::unique_ptr<jit::IJitGenFreeList> jit_gen_free_list;
 
   std::unique_ptr<IAsyncLazyValueState> async_lazy_value;
