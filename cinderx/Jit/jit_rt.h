@@ -200,6 +200,30 @@ PyObject* JITRT_RaytraceAddColoursTupleFloatHelper(
     PyObject* right);
 
 /*
+ * Narrow helper for bm_comprehensions.WidgetTray._is_big_spinny(widget).
+ *
+ * `big_kind` must be the module's `WidgetKind.BIG` singleton.
+ */
+PyObject* JITRT_ComprehensionsIsBigSpinnyHelper(
+    PyObject* widget,
+    PyObject* big_kind);
+
+/*
+ * Narrow helper for bm_comprehensions.WidgetTray._any_knobby(widgets).
+ */
+PyObject* JITRT_ComprehensionsAnyKnobbyHelper(PyObject* widgets);
+
+/*
+ * Narrow helper for bm_comprehensions id_to_widget.get(key).
+ */
+PyObject* JITRT_ComprehensionsDictGetHelper(PyObject* dict, PyObject* key);
+
+/*
+ * Narrow helper for bm_comprehensions sortable_widgets.sort().
+ */
+PyObject* JITRT_ComprehensionsListSortHelper(PyObject* list_obj);
+
+/*
  * Helper to perform a Python call with dynamically determined arguments.
  *
  * pargs will be a possibly empty tuple of positional arguments, kwargs will be

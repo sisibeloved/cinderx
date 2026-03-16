@@ -199,9 +199,13 @@ richards 在 macOS Arm 上 speedup=1.0254x，方向正确，建议继续上 Linu
 | 013 | 已接受 | Nqueens list-slice concat fast path | `149aab66` | `PYTHONJIT_ARM_LIST_SLICE_CONCAT=1` | `nqueens` | `1.0151x` | `+1.51%` | `1.0057x` | `+0.57%` | 已提交 |
 | 014 | 已替代 | Raytrace addColours float-guard 组合开关 | `N/A` | `PYTHONJIT_ARM_POLYMORPHIC_SELF_NO_INSTANCE_VALUE=1` + `PYTHONJIT_ARM_RAYTRACE_ADD_COLOURS_FLOAT_GUARDS=1` | `raytrace` | `1.0133x` | `+1.33%` | `1.0020x` | `+0.20%` | 被 016 替代 |
 | 015 | 已拒绝 | Raytrace addColours tuple-float helper | `N/A` | `PYTHONJIT_ARM_RAYTRACE_ADD_COLOURS_TUPLE_FLOAT_HELPER=1` | `raytrace` | `0.9974x` | `-0.26%` | `0.9985x` | `-0.15%` | 单开拒绝 |
-| 016 | 已接受 | Raytrace polymorphic-self + tuple-float helper 组合开关 | `N/A` | `PYTHONJIT_ARM_POLYMORPHIC_SELF_NO_INSTANCE_VALUE=1` + `PYTHONJIT_ARM_RAYTRACE_ADD_COLOURS_TUPLE_FLOAT_HELPER=1` | `raytrace` | `1.0312x` | `+3.12%` | `1.0022x` | `+0.22%` | 待提交 |
+| 016 | 已接受 | Raytrace polymorphic-self + tuple-float helper 组合开关 | `cd054cd7` | `PYTHONJIT_ARM_POLYMORPHIC_SELF_NO_INSTANCE_VALUE=1` + `PYTHONJIT_ARM_RAYTRACE_ADD_COLOURS_TUPLE_FLOAT_HELPER=1` | `raytrace` | `1.0312x` | `+3.12%` | `1.0022x` | `+0.22%` | 已提交 |
 | 017 | 已拒绝 | Raytrace vector-dot helper | `N/A` | `PYTHONJIT_ARM_RAYTRACE_VECTOR_DOT_HELPER=1` | `raytrace` | `0.9437x` | `-5.63%` | `N/A` | `N/A` | 单开拒绝 |
 | 018 | 已拒绝 | Raytrace polymorphic-self + tuple-float + vector-dot 组合开关 | `N/A` | `PYTHONJIT_ARM_POLYMORPHIC_SELF_NO_INSTANCE_VALUE=1` + `PYTHONJIT_ARM_RAYTRACE_ADD_COLOURS_TUPLE_FLOAT_HELPER=1` + `PYTHONJIT_ARM_RAYTRACE_VECTOR_DOT_HELPER=1` | `raytrace` | `0.9575x` | `-4.25%` | `N/A` | `N/A` | 主用例退化，拒绝 |
+| 019 | 已拒绝 | Comprehensions tiny-helpers 组合开关 | `N/A` | `PYTHONJIT_ARM_COMPREHENSIONS_TINY_HELPERS=1` | `comprehensions` | `0.9710x` | `-2.90%` | `0.9964x` | `-0.36%` | 主用例与 10 用例集都未过线 |
+| 020 | 已拒绝 | Comprehensions dict-get helper | `N/A` | `PYTHONJIT_ARM_COMPREHENSIONS_DICT_GET_HELPER=1` | `comprehensions` | `0.9704x` | `-2.96%` | `0.9985x` | `-0.15%` | 主用例未过线 |
+| 021 | 已接受 | Comprehensions list-sort helper | `N/A` | `PYTHONJIT_ARM_COMPREHENSIONS_LIST_SORT_HELPER=1` | `comprehensions` | `0.9926x` | `-0.74%` | `1.0105x` | `+1.05%` | 10 用例集几何平均过线 |
+| 022 | 已拒绝 | Comprehensions dict-get + list-sort 组合开关 | `N/A` | `PYTHONJIT_ARM_COMPREHENSIONS_DICT_GET_HELPER=1` + `PYTHONJIT_ARM_COMPREHENSIONS_LIST_SORT_HELPER=1` | `comprehensions` | `0.9142x` | `-8.58%` | `0.9425x` | `-5.75%` | 组合退化，拒绝 |
 
 ---
 

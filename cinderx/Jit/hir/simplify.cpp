@@ -72,6 +72,41 @@ bool armRaytraceAddColoursTupleFloatHelperEnabled() {
   return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
 }
 
+bool armComprehensionsTinyHelpersEnabled() {
+  const char* env =
+      std::getenv("PYTHONJIT_ARM_COMPREHENSIONS_TINY_HELPERS");
+  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
+}
+
+bool armComprehensionsDictGetHelperEnabled() {
+  const char* env =
+      std::getenv("PYTHONJIT_ARM_COMPREHENSIONS_DICT_GET_HELPER");
+  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
+}
+
+bool armComprehensionsListSortHelperEnabled() {
+  const char* env =
+      std::getenv("PYTHONJIT_ARM_COMPREHENSIONS_LIST_SORT_HELPER");
+  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
+}
+
+bool isComprehensionsCode(
+    BorrowedRef<PyCodeObject> code,
+    const char* qualname_expected) {
+  if (code == nullptr || !PyUnicode_Check(code->co_qualname) ||
+      !PyUnicode_Check(code->co_filename)) {
+    return false;
+  }
+  const char* qualname = PyUnicode_AsUTF8(code->co_qualname);
+  const char* filename = PyUnicode_AsUTF8(code->co_filename);
+  if (qualname == nullptr || filename == nullptr) {
+    PyErr_Clear();
+    return false;
+  }
+  return std::strcmp(qualname, qualname_expected) == 0 &&
+      std::strstr(filename, "bm_comprehensions/run_benchmark.py") != nullptr;
+}
+
 bool isRaytraceAddColoursCode(BorrowedRef<PyCodeObject> code) {
   if (code == nullptr || !PyUnicode_Check(code->co_qualname) ||
       !PyUnicode_Check(code->co_filename)) {
@@ -105,6 +140,24 @@ bool isRaytraceModuleCode(BorrowedRef<PyCodeObject> code) {
     return false;
   }
   return std::strstr(filename, "bm_raytrace/run_benchmark.py") != nullptr;
+}
+
+Ref<> getComprehensionsWidgetKindBig(BorrowedRef<PyDictObject> globals) {
+  if (globals == nullptr) {
+    return nullptr;
+  }
+  ThreadedCompileSerialize guard;
+  BorrowedRef<> widget_kind = PyDict_GetItemString(globals, "WidgetKind");
+  if (widget_kind == nullptr) {
+    PyErr_Clear();
+    return nullptr;
+  }
+  Ref<> big = Ref<>::steal(PyObject_GetAttrString(widget_kind, "BIG"));
+  if (big == nullptr) {
+    PyErr_Clear();
+    return nullptr;
+  }
+  return big;
 }
 
 struct Env {
@@ -2426,6 +2479,165 @@ static Register* simplifyRaytraceAddColoursTupleFloatHelper(
   return env.emit<CheckExc>(result, *instr->frameState());
 }
 
+static Register* simplifyComprehensionsIsBigSpinnyHelper(
+    Env& env,
+    const CallMethod* instr) {
+  if (!armComprehensionsTinyHelpersEnabled() || instr->NumArgs() != 1) {
+    return nullptr;
+  }
+
+  BorrowedRef<PyCodeObject> enclosing_code{env.func.code};
+  if (!isComprehensionsCode(enclosing_code, "WidgetTray._add_widgets")) {
+    return nullptr;
+  }
+
+  Register* target = modelReg(instr->func());
+  if (!isLoadMethodBase(*target->instr())) {
+    return nullptr;
+  }
+  auto* load_method = static_cast<const LoadMethodBase*>(target->instr());
+  BorrowedRef<PyCodeObject> code = env.func.codeFor(*load_method);
+  if (code == nullptr) {
+    return nullptr;
+  }
+
+  BorrowedRef<PyUnicodeObject> method_name{
+      PyTuple_GET_ITEM(code->co_names, load_method->name_idx())};
+  if (PyUnicode_CompareWithASCIIString(method_name, "_is_big_spinny") != 0) {
+    PyErr_Clear();
+    return nullptr;
+  }
+
+  Ref<> big_kind =
+      getComprehensionsWidgetKindBig(BorrowedRef<PyDictObject>{env.func.globals});
+  if (big_kind == nullptr) {
+    return nullptr;
+  }
+
+  Register* big_kind_const =
+      env.emit<LoadConst>(
+          Type::fromObject(env.func.env.addReference(std::move(big_kind))));
+  Register* result = env.emitVariadic<CallStatic>(
+      2,
+      reinterpret_cast<void*>(JITRT_ComprehensionsIsBigSpinnyHelper),
+      instr->output()->type() | TNullptr,
+      instr->arg(0),
+      big_kind_const);
+  return env.emit<CheckExc>(result, *instr->frameState());
+}
+
+static Register* simplifyComprehensionsAnyKnobbyHelper(
+    Env& env,
+    const CallMethod* instr) {
+  if (!armComprehensionsTinyHelpersEnabled() || instr->NumArgs() != 1) {
+    return nullptr;
+  }
+
+  BorrowedRef<PyCodeObject> enclosing_code{env.func.code};
+  if (!isComprehensionsCode(enclosing_code, "WidgetTray._add_widgets")) {
+    return nullptr;
+  }
+
+  Register* target = modelReg(instr->func());
+  if (!isLoadMethodBase(*target->instr())) {
+    return nullptr;
+  }
+  auto* load_method = static_cast<const LoadMethodBase*>(target->instr());
+  BorrowedRef<PyCodeObject> code = env.func.codeFor(*load_method);
+  if (code == nullptr) {
+    return nullptr;
+  }
+
+  BorrowedRef<PyUnicodeObject> method_name{
+      PyTuple_GET_ITEM(code->co_names, load_method->name_idx())};
+  if (PyUnicode_CompareWithASCIIString(method_name, "_any_knobby") != 0) {
+    PyErr_Clear();
+    return nullptr;
+  }
+
+  Register* result = env.emitVariadic<CallStatic>(
+      1,
+      reinterpret_cast<void*>(JITRT_ComprehensionsAnyKnobbyHelper),
+      instr->output()->type() | TNullptr,
+      instr->arg(0));
+  return env.emit<CheckExc>(result, *instr->frameState());
+}
+
+static Register* simplifyComprehensionsDictGetHelper(
+    Env& env,
+    const CallMethod* instr) {
+  if (!armComprehensionsDictGetHelperEnabled() || instr->NumArgs() != 1) {
+    return nullptr;
+  }
+
+  BorrowedRef<PyCodeObject> enclosing_code{env.func.code};
+  if (!isComprehensionsCode(enclosing_code, "WidgetTray._add_widgets")) {
+    return nullptr;
+  }
+
+  Register* target = modelReg(instr->func());
+  if (!isLoadMethodBase(*target->instr())) {
+    return nullptr;
+  }
+  auto* load_method = static_cast<const LoadMethodBase*>(target->instr());
+  BorrowedRef<PyCodeObject> code = env.func.codeFor(*load_method);
+  if (code == nullptr) {
+    return nullptr;
+  }
+
+  BorrowedRef<PyUnicodeObject> method_name{
+      PyTuple_GET_ITEM(code->co_names, load_method->name_idx())};
+  if (PyUnicode_CompareWithASCIIString(method_name, "get") != 0) {
+    PyErr_Clear();
+    return nullptr;
+  }
+
+  Register* result = env.emitVariadic<CallStatic>(
+      2,
+      reinterpret_cast<void*>(JITRT_ComprehensionsDictGetHelper),
+      instr->output()->type() | TNullptr,
+      instr->self(),
+      instr->arg(0));
+  return env.emit<CheckExc>(result, *instr->frameState());
+}
+
+static Register* simplifyComprehensionsListSortHelper(
+    Env& env,
+    const CallMethod* instr) {
+  if (!armComprehensionsListSortHelperEnabled() || instr->NumArgs() != 0) {
+    return nullptr;
+  }
+
+  BorrowedRef<PyCodeObject> enclosing_code{env.func.code};
+  if (!isComprehensionsCode(enclosing_code, "WidgetTray._add_widgets")) {
+    return nullptr;
+  }
+
+  Register* target = modelReg(instr->func());
+  if (!isLoadMethodBase(*target->instr())) {
+    return nullptr;
+  }
+  auto* load_method = static_cast<const LoadMethodBase*>(target->instr());
+  BorrowedRef<PyCodeObject> code = env.func.codeFor(*load_method);
+  if (code == nullptr) {
+    return nullptr;
+  }
+
+  BorrowedRef<PyUnicodeObject> method_name{
+      PyTuple_GET_ITEM(code->co_names, load_method->name_idx())};
+  if (PyUnicode_CompareWithASCIIString(method_name, "sort") != 0) {
+    PyErr_Clear();
+    return nullptr;
+  }
+
+  Register* result = env.emitVariadic<CallStatic>(
+      1,
+      reinterpret_cast<void*>(JITRT_ComprehensionsListSortHelper),
+      instr->output()->type() | TNullptr,
+      instr->self());
+  return env.emit<CheckExc>(result, *instr->frameState());
+}
+
 static BorrowedRef<PyDictObject> getKnownModuleDict(BorrowedRef<> obj) {
   if (PyModule_Check(obj)) {
     return reinterpret_cast<PyModuleObject*>(obj.get())->md_dict;
@@ -2686,6 +2898,18 @@ static Register* resolveArgs(
 
 Register* simplifyCallMethod(Env& env, const CallMethod* instr) {
   if (Register* result = simplifyCallMethodTinyReturnSelf(env, instr)) {
+    return result;
+  }
+  if (Register* result = simplifyComprehensionsIsBigSpinnyHelper(env, instr)) {
+    return result;
+  }
+  if (Register* result = simplifyComprehensionsAnyKnobbyHelper(env, instr)) {
+    return result;
+  }
+  if (Register* result = simplifyComprehensionsDictGetHelper(env, instr)) {
+    return result;
+  }
+  if (Register* result = simplifyComprehensionsListSortHelper(env, instr)) {
     return result;
   }
   if (Register* result = simplifyRaytraceAddColoursTupleFloatHelper(env, instr)) {

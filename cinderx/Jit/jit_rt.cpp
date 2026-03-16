@@ -1015,6 +1015,119 @@ generic_fallback:
   return result.release();
 }
 
+PyObject* JITRT_ComprehensionsIsBigSpinnyHelper(
+    PyObject* widget,
+    PyObject* big_kind) {
+  Ref<> kind = Ref<>::steal(PyObject_GetAttrString(widget, "kind"));
+  if (kind == nullptr) {
+    return nullptr;
+  }
+  if (kind.get() != big_kind) {
+    Py_RETURN_FALSE;
+  }
+
+  Ref<> has_spinner = Ref<>::steal(PyObject_GetAttrString(widget, "has_spinner"));
+  if (has_spinner == nullptr) {
+    return nullptr;
+  }
+  if (has_spinner == Py_True) {
+    Py_RETURN_TRUE;
+  }
+  if (has_spinner == Py_False) {
+    Py_RETURN_FALSE;
+  }
+
+  int truth = PyObject_IsTrue(has_spinner);
+  if (truth < 0) {
+    return nullptr;
+  }
+  if (truth) {
+    Py_RETURN_TRUE;
+  }
+  Py_RETURN_FALSE;
+}
+
+PyObject* JITRT_ComprehensionsAnyKnobbyHelper(PyObject* widgets) {
+  Ref<> iter = Ref<>::steal(PyObject_GetIter(widgets));
+  if (iter == nullptr) {
+    return nullptr;
+  }
+
+  while (true) {
+    Ref<> item = Ref<>::steal(PyIter_Next(iter));
+    if (item == nullptr) {
+      if (PyErr_Occurred()) {
+        return nullptr;
+      }
+      Py_RETURN_FALSE;
+    }
+    if (item == Py_None) {
+      continue;
+    }
+
+    int item_truth = PyObject_IsTrue(item);
+    if (item_truth < 0) {
+      return nullptr;
+    }
+    if (!item_truth) {
+      continue;
+    }
+
+    Ref<> has_knob = Ref<>::steal(PyObject_GetAttrString(item, "has_knob"));
+    if (has_knob == nullptr) {
+      return nullptr;
+    }
+    if (has_knob == Py_True) {
+      Py_RETURN_TRUE;
+    }
+    if (has_knob == Py_False) {
+      continue;
+    }
+
+    int knob_truth = PyObject_IsTrue(has_knob);
+    if (knob_truth < 0) {
+      return nullptr;
+    }
+    if (knob_truth) {
+      Py_RETURN_TRUE;
+    }
+  }
+}
+
+PyObject* JITRT_ComprehensionsDictGetHelper(PyObject* dict, PyObject* key) {
+  if (PyDict_CheckExact(dict)) {
+    PyObject* value = PyDict_GetItemWithError(dict, key);
+    if (value != nullptr) {
+      return Py_NewRef(value);
+    }
+    if (PyErr_Occurred()) {
+      return nullptr;
+    }
+    Py_RETURN_NONE;
+  }
+
+  Ref<> name = Ref<>::steal(PyUnicode_FromString("get"));
+  if (name == nullptr) {
+    return nullptr;
+  }
+  return PyObject_CallMethodObjArgs(dict, name, key, nullptr);
+}
+
+PyObject* JITRT_ComprehensionsListSortHelper(PyObject* list_obj) {
+  if (PyList_CheckExact(list_obj)) {
+    if (PyList_Sort(list_obj) < 0) {
+      return nullptr;
+    }
+    Py_RETURN_NONE;
+  }
+
+  Ref<> name = Ref<>::steal(PyUnicode_FromString("sort"));
+  if (name == nullptr) {
+    return nullptr;
+  }
+  return PyObject_CallMethodObjArgs(list_obj, name, nullptr);
+}
+
 PyObject* JITRT_LoadFunctionIndirect(PyObject** func, PyObject* descr) {
   PyObject* res = *func;
   if (!res) {
