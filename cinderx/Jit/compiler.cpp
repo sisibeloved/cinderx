@@ -19,6 +19,7 @@
 #include "cinderx/Jit/hir/insert_update_prev_instr.h"
 #include "cinderx/Jit/hir/list_slice_cleanup.h"
 #include "cinderx/Jit/hir/long_loop_unboxing.h"
+#include "cinderx/Jit/hir/make_function_const_fold.h"
 #include "cinderx/Jit/hir/phi_elimination.h"
 #include "cinderx/Jit/hir/printer.h"
 #include "cinderx/Jit/hir/primitive_box_remat.h"
@@ -128,6 +129,7 @@ void Compiler::runPasses(
   runPass(jit::hir::RefcountInsertion{}, irfunc, callback);
   runPass(jit::hir::ListSliceCleanup{}, irfunc, callback);
   runPass(jit::hir::FloatCompareElimination{}, irfunc, callback);
+  runPass(jit::hir::MakeFunctionConstFold{}, irfunc, callback);
   runPass(jit::hir::PrimitiveBoxRemat{}, irfunc, callback);
 
   if (getConfig().dump_hir_stats) {
@@ -285,7 +287,7 @@ std::optional<CompiledFunctionData> Compiler::Compile(
     irfunc->setCompilationPhaseTimer(nullptr);
     compiled_data.irfunc = std::move(irfunc);
   }
-  return std::move(compiled_data);
+  return compiled_data;
 }
 
 } // namespace jit
