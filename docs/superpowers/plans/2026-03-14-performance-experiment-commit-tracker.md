@@ -195,7 +195,8 @@ richards 在 macOS Arm 上 speedup=1.0254x，方向正确，建议继续上 Linu
 | 009 | 已拒绝 | Raytrace float+colourAt 组合开关 | `N/A` | `PYTHONJIT_ARM_RAYTRACE_FLOAT_GUARD_RELAX=1` + `PYTHONJIT_ARM_RAYTRACE_COLOURAT_RELAX_ATTR_GUARDS=1` | `raytrace` | `1.0250x` | `+2.50%` | `0.9693x` | `-3.07%` | 拒绝 |
 | 010 | 已测量 | Arm generator resume / attr / decref fast path | `N/A` | 无 | `generators` | `N/A` | `N/A` | `N/A` | `N/A` | 分析中 |
 | 011 | 已拒绝 | Arm generator none-truthy specialization | `N/A` | `PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY=1` | `generators` | `1.0018x` | `+0.18%` | `0.9941x` | `-0.59%` | 拒绝 |
-| 012 | 已测量 | Polymorphic self no-instance-value | `N/A` | `PYTHONJIT_ARM_POLYMORPHIC_SELF_NO_INSTANCE_VALUE=1` | `raytrace` | `1.0151x` | `+1.51%` | `1.0130x` | `+1.30%` | 可提交候选 |
+| 012 | 已接受 | Polymorphic self no-instance-value | `d49af803` | `PYTHONJIT_ARM_POLYMORPHIC_SELF_NO_INSTANCE_VALUE=1` | `raytrace` | `1.0151x` | `+1.51%` | `1.0130x` | `+1.30%` | 已提交 |
+| 013 | 已接受 | Nqueens list-slice concat fast path | `149aab66` | `PYTHONJIT_ARM_LIST_SLICE_CONCAT=1` | `nqueens` | `1.0151x` | `+1.51%` | `1.0057x` | `+0.57%` | 已提交 |
 
 ---
 
@@ -218,6 +219,6 @@ richards 在 macOS Arm 上 speedup=1.0254x，方向正确，建议继续上 Linu
 | 优先级 | 提交编号 | 主题 | 下一步 |
 |---|---:|---|---|
 | P0 | 006 | `comprehensions` correctness fix | 先恢复 benchmark 可测状态 |
-| P1 | 012 | Polymorphic self no-instance-value | 已过提交门槛；下一步整理成单开关提交 |
-| P2 | 006 | `comprehensions` correctness fix | 先恢复 benchmark 可测状态 |
-| P3 | 010 | Arm generator resume / attr / decref fast path | 分析已收束；只有在 `raytrace` 与 `comprehensions` 方向枯竭后才回来看是否还有新假设 |
+| P1 | 005 | Arm tiny numeric leaf fast path | 重新收缩成更窄的 `raytrace`/数值热点假设 |
+| P2 | 010 | Arm generator resume / attr / decref fast path | 只在 `raytrace` 与 `comprehensions` 方向枯竭后再回看 |
+| P3 | 013 | Nqueens list-slice concat fast path | 已提交，等待后续 Linux Arm 正式验证 |

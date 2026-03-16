@@ -11,6 +11,7 @@
 #include "cinderx/Common/code.h"
 #include "cinderx/Common/type.h"
 #include "cinderx/Jit/context.h"
+#include "cinderx/Jit/jit_rt.h"
 #include "cinderx/Jit/bytecode.h"
 #include "cinderx/Jit/hir/analysis.h"
 #include "cinderx/Jit/hir/clean_cfg.h"
@@ -60,6 +61,11 @@ namespace jit::hir {
 // functions.
 
 namespace {
+bool armListSliceConcatEnabled() {
+  const char* env = std::getenv("PYTHONJIT_ARM_LIST_SLICE_CONCAT");
+  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
+}
+
 struct Env {
   explicit Env(Function& f)
       : func{f},
@@ -925,6 +931,19 @@ Register* simplifyBinaryOp(Env& env, const BinaryOp* instr) {
   BinaryOpKind op = instr->op();
   Register* lhs = instr->left();
   Register* rhs = instr->right();
+
+  if (armListSliceConcatEnabled() && op == BinaryOpKind::kAdd &&
+      lhs->instr()->IsListSlice() && rhs->instr()->IsListSlice()) {
+    auto output = env.func.env.AllocateRegister();
+    auto* call = env.emitRawInstr<CallStatic>(
+        2,
+        output,
+        reinterpret_cast<void*>(JITRT_ListConcat),
+        TOptObject,
+        lhs,
+        rhs);
+    return env.emit<CheckExc>(call->output(), *instr->frameState());
+  }
 
   if (op == BinaryOpKind::kSubscript) {
     if (lhs->isA(TDictExact)) {

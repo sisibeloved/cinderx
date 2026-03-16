@@ -183,6 +183,12 @@ PyObject* JITRT_LoadGlobalsDict(PyThreadState* tstate);
 PyObject* JITRT_ListSlice(PyObject* list, PyObject* start, PyObject* stop);
 
 /*
+ * Concatenate two slice-like values. When both operands are exact lists, use a
+ * direct exact-list concat path. Otherwise fall back to generic `+` semantics.
+ */
+PyObject* JITRT_ListConcat(PyObject* left, PyObject* right);
+
+/*
  * Helper to perform a Python call with dynamically determined arguments.
  *
  * pargs will be a possibly empty tuple of positional arguments, kwargs will be

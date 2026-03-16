@@ -928,6 +928,13 @@ PyObject* JITRT_ListSlice(PyObject* list, PyObject* start, PyObject* stop) {
   return PyList_GetSlice(list, start_index, stop_index);
 }
 
+PyObject* JITRT_ListConcat(PyObject* left, PyObject* right) {
+  if (PyList_CheckExact(left) && PyList_CheckExact(right)) {
+    return PyList_Type.tp_as_sequence->sq_concat(left, right);
+  }
+  return PyNumber_Add(left, right);
+}
+
 PyObject* JITRT_LoadFunctionIndirect(PyObject** func, PyObject* descr) {
   PyObject* res = *func;
   if (!res) {
