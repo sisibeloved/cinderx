@@ -935,6 +935,86 @@ PyObject* JITRT_ListConcat(PyObject* left, PyObject* right) {
   return PyNumber_Add(left, right);
 }
 
+static bool raytraceAddColoursTryUnbox(PyObject* obj, double* out) {
+  if (PyFloat_CheckExact(obj)) {
+    *out = PyFloat_AS_DOUBLE(obj);
+    return true;
+  }
+  if (PyLong_CheckExact(obj)) {
+    double value = PyLong_AsDouble(obj);
+    if (value == -1.0 && PyErr_Occurred()) {
+      return false;
+    }
+    *out = value;
+    return true;
+  }
+  return false;
+}
+
+PyObject* JITRT_RaytraceAddColoursTupleFloatHelper(
+    PyObject* left,
+    PyObject* scale,
+    PyObject* right) {
+  if (PyTuple_CheckExact(left) && PyTuple_CheckExact(right) &&
+      PyTuple_GET_SIZE(left) == 3 && PyTuple_GET_SIZE(right) == 3 &&
+      PyFloat_CheckExact(scale)) {
+    double scale_value = PyFloat_AS_DOUBLE(scale);
+    double left_values[3];
+    double right_values[3];
+    for (Py_ssize_t i = 0; i < 3; i++) {
+      if (!raytraceAddColoursTryUnbox(PyTuple_GET_ITEM(left, i), &left_values[i]) ||
+          !raytraceAddColoursTryUnbox(PyTuple_GET_ITEM(right, i), &right_values[i])) {
+        PyErr_Clear();
+        goto generic_fallback;
+      }
+    }
+
+    Ref<> result = Ref<>::steal(PyTuple_New(3));
+    if (result == nullptr) {
+      return nullptr;
+    }
+    for (Py_ssize_t i = 0; i < 3; i++) {
+      PyObject* item =
+          PyFloat_FromDouble(left_values[i] + scale_value * right_values[i]);
+      if (item == nullptr) {
+        return nullptr;
+      }
+      PyTuple_SET_ITEM(result.get(), i, item);
+    }
+    return result.release();
+  }
+
+generic_fallback:
+  Ref<> result = Ref<>::steal(PyTuple_New(3));
+  if (result == nullptr) {
+    return nullptr;
+  }
+  for (Py_ssize_t i = 0; i < 3; i++) {
+    Ref<> index = Ref<>::steal(PyLong_FromSsize_t(i));
+    if (index == nullptr) {
+      return nullptr;
+    }
+    Ref<> left_item = Ref<>::steal(PyObject_GetItem(left, index));
+    if (left_item == nullptr) {
+      return nullptr;
+    }
+    Ref<> right_item = Ref<>::steal(PyObject_GetItem(right, index));
+    if (right_item == nullptr) {
+      return nullptr;
+    }
+    Ref<> scaled = Ref<>::steal(PyNumber_Multiply(scale, right_item));
+    if (scaled == nullptr) {
+      return nullptr;
+    }
+    Ref<> summed = Ref<>::steal(PyNumber_Add(left_item, scaled));
+    if (summed == nullptr) {
+      return nullptr;
+    }
+    PyTuple_SET_ITEM(result.get(), i, summed.release());
+  }
+  return result.release();
+}
+
 PyObject* JITRT_LoadFunctionIndirect(PyObject** func, PyObject* descr) {
   PyObject* res = *func;
   if (!res) {

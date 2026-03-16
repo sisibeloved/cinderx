@@ -197,6 +197,11 @@ richards 在 macOS Arm 上 speedup=1.0254x，方向正确，建议继续上 Linu
 | 011 | 已拒绝 | Arm generator none-truthy specialization | `N/A` | `PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY=1` | `generators` | `1.0018x` | `+0.18%` | `0.9941x` | `-0.59%` | 拒绝 |
 | 012 | 已接受 | Polymorphic self no-instance-value | `d49af803` | `PYTHONJIT_ARM_POLYMORPHIC_SELF_NO_INSTANCE_VALUE=1` | `raytrace` | `1.0151x` | `+1.51%` | `1.0130x` | `+1.30%` | 已提交 |
 | 013 | 已接受 | Nqueens list-slice concat fast path | `149aab66` | `PYTHONJIT_ARM_LIST_SLICE_CONCAT=1` | `nqueens` | `1.0151x` | `+1.51%` | `1.0057x` | `+0.57%` | 已提交 |
+| 014 | 已替代 | Raytrace addColours float-guard 组合开关 | `N/A` | `PYTHONJIT_ARM_POLYMORPHIC_SELF_NO_INSTANCE_VALUE=1` + `PYTHONJIT_ARM_RAYTRACE_ADD_COLOURS_FLOAT_GUARDS=1` | `raytrace` | `1.0133x` | `+1.33%` | `1.0020x` | `+0.20%` | 被 016 替代 |
+| 015 | 已拒绝 | Raytrace addColours tuple-float helper | `N/A` | `PYTHONJIT_ARM_RAYTRACE_ADD_COLOURS_TUPLE_FLOAT_HELPER=1` | `raytrace` | `0.9974x` | `-0.26%` | `0.9985x` | `-0.15%` | 单开拒绝 |
+| 016 | 已接受 | Raytrace polymorphic-self + tuple-float helper 组合开关 | `N/A` | `PYTHONJIT_ARM_POLYMORPHIC_SELF_NO_INSTANCE_VALUE=1` + `PYTHONJIT_ARM_RAYTRACE_ADD_COLOURS_TUPLE_FLOAT_HELPER=1` | `raytrace` | `1.0312x` | `+3.12%` | `1.0022x` | `+0.22%` | 待提交 |
+| 017 | 已拒绝 | Raytrace vector-dot helper | `N/A` | `PYTHONJIT_ARM_RAYTRACE_VECTOR_DOT_HELPER=1` | `raytrace` | `0.9437x` | `-5.63%` | `N/A` | `N/A` | 单开拒绝 |
+| 018 | 已拒绝 | Raytrace polymorphic-self + tuple-float + vector-dot 组合开关 | `N/A` | `PYTHONJIT_ARM_POLYMORPHIC_SELF_NO_INSTANCE_VALUE=1` + `PYTHONJIT_ARM_RAYTRACE_ADD_COLOURS_TUPLE_FLOAT_HELPER=1` + `PYTHONJIT_ARM_RAYTRACE_VECTOR_DOT_HELPER=1` | `raytrace` | `0.9575x` | `-4.25%` | `N/A` | `N/A` | 主用例退化，拒绝 |
 
 ---
 
@@ -220,5 +225,5 @@ richards 在 macOS Arm 上 speedup=1.0254x，方向正确，建议继续上 Linu
 |---|---:|---|---|
 | P0 | 006 | `comprehensions` correctness fix | 先恢复 benchmark 可测状态 |
 | P1 | 005 | Arm tiny numeric leaf fast path | 重新收缩成更窄的 `raytrace`/数值热点假设 |
-| P2 | 010 | Arm generator resume / attr / decref fast path | 只在 `raytrace` 与 `comprehensions` 方向枯竭后再回看 |
-| P3 | 013 | Nqueens list-slice concat fast path | 已提交，等待后续 Linux Arm 正式验证 |
+| P2 | 016 | Raytrace polymorphic-self + tuple-float helper 组合开关 | 已过线，等待提交到主树 |
+| P3 | 010 | Arm generator resume / attr / decref fast path | 只在 `raytrace` 与 `comprehensions` 方向枯竭后再回看 |

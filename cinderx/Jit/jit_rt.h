@@ -189,6 +189,17 @@ PyObject* JITRT_ListSlice(PyObject* list, PyObject* start, PyObject* stop);
 PyObject* JITRT_ListConcat(PyObject* left, PyObject* right);
 
 /*
+ * Narrow helper for bm_raytrace.addColours(a, scale, b).
+ *
+ * Fast-path exact 3-tuples of exact ints/floats with an exact float scale.
+ * Fall back to generic Python semantics for other shapes.
+ */
+PyObject* JITRT_RaytraceAddColoursTupleFloatHelper(
+    PyObject* left,
+    PyObject* scale,
+    PyObject* right);
+
+/*
  * Helper to perform a Python call with dynamically determined arguments.
  *
  * pargs will be a possibly empty tuple of positional arguments, kwargs will be

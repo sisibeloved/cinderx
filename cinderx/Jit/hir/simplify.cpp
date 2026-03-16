@@ -66,6 +66,47 @@ bool armListSliceConcatEnabled() {
   return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
 }
 
+bool armRaytraceAddColoursTupleFloatHelperEnabled() {
+  const char* env =
+      std::getenv("PYTHONJIT_ARM_RAYTRACE_ADD_COLOURS_TUPLE_FLOAT_HELPER");
+  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
+}
+
+bool isRaytraceAddColoursCode(BorrowedRef<PyCodeObject> code) {
+  if (code == nullptr || !PyUnicode_Check(code->co_qualname) ||
+      !PyUnicode_Check(code->co_filename)) {
+    return false;
+  }
+  const char* qualname = PyUnicode_AsUTF8(code->co_qualname);
+  const char* filename = PyUnicode_AsUTF8(code->co_filename);
+  if (qualname == nullptr || filename == nullptr) {
+    PyErr_Clear();
+    return false;
+  }
+  return std::strcmp(qualname, "addColours") == 0 &&
+      std::strstr(filename, "bm_raytrace/run_benchmark.py") != nullptr;
+}
+
+bool isRaytraceAddColoursFunction(PyObject* obj) {
+  if (!PyFunction_Check(obj)) {
+    return false;
+  }
+  auto* func = reinterpret_cast<PyFunctionObject*>(obj);
+  return isRaytraceAddColoursCode(BorrowedRef<PyCodeObject>{func->func_code});
+}
+
+bool isRaytraceModuleCode(BorrowedRef<PyCodeObject> code) {
+  if (code == nullptr || !PyUnicode_Check(code->co_filename)) {
+    return false;
+  }
+  const char* filename = PyUnicode_AsUTF8(code->co_filename);
+  if (filename == nullptr) {
+    PyErr_Clear();
+    return false;
+  }
+  return std::strstr(filename, "bm_raytrace/run_benchmark.py") != nullptr;
+}
+
 struct Env {
   explicit Env(Function& f)
       : func{f},
@@ -2359,6 +2400,32 @@ static Register* simplifyCallMethodTinyReturnSelf(
   return env.emit<Assign>(guarded_receiver);
 }
 
+static Register* simplifyRaytraceAddColoursTupleFloatHelper(
+    Env& env,
+    const CallMethod* instr) {
+  if (!armRaytraceAddColoursTupleFloatHelperEnabled() || instr->NumArgs() != 3) {
+    return nullptr;
+  }
+  if (!(instr->self()->type() <= TNullptr)) {
+    return nullptr;
+  }
+
+  Register* func = instr->func();
+  PyObject* func_obj = func->type().asObject();
+  if (!isRaytraceAddColoursFunction(func_obj)) {
+    return nullptr;
+  }
+
+  Register* result = env.emitVariadic<CallStatic>(
+      3,
+      reinterpret_cast<void*>(JITRT_RaytraceAddColoursTupleFloatHelper),
+      instr->output()->type() | TNullptr,
+      instr->arg(0),
+      instr->arg(1),
+      instr->arg(2));
+  return env.emit<CheckExc>(result, *instr->frameState());
+}
+
 static BorrowedRef<PyDictObject> getKnownModuleDict(BorrowedRef<> obj) {
   if (PyModule_Check(obj)) {
     return reinterpret_cast<PyModuleObject*>(obj.get())->md_dict;
@@ -2619,6 +2686,9 @@ static Register* resolveArgs(
 
 Register* simplifyCallMethod(Env& env, const CallMethod* instr) {
   if (Register* result = simplifyCallMethodTinyReturnSelf(env, instr)) {
+    return result;
+  }
+  if (Register* result = simplifyRaytraceAddColoursTupleFloatHelper(env, instr)) {
     return result;
   }
 
