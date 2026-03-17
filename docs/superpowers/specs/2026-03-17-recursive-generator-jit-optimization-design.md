@@ -1,306 +1,306 @@
-# Recursive Generator JIT Optimization Design
+# 递归生成器 JIT 优化设计文档
 
-**Date**: 2026-03-17
-**Status**: Draft
-**Author**: Claude Code (based on brainstorming session)
+**日期**: 2026-03-17
+**状态**: 草稿
+**作者**: Claude Code（基于头脑风暴会话）
 
-## 1. Problem Statement
+## 1. 问题陈述
 
-### Current Situation
+### 当前情况
 
-JIT-compiling recursive generators with `yield from` causes a 1.8-1.9x performance regression compared to CPython interpreter:
+使用 `yield from` 的 JIT 编译递归生成器相比 CPython 解释器有 1.8-1.9x 的性能回退：
 
-- **CPython baseline (ARM hardware)**: ~29.8ms
-- **CinderX JIT (ARM hardware)**: ~57.2ms (1.92x slower)
-- **Docker ARM64 QEMU**: ~35.7ms (CPython) vs ~67.5ms (CinderX JIT, 1.89x slower)
+- **CPython 基线（ARM 硬件）**: ~29.8ms
+- **CinderX JIT（ARM 硬件）**: ~57.2ms（慢 1.92x）
+- **Docker ARM64 QEMU**: ~35.7ms（CPython）vs ~67.5ms（CinderX JIT，慢 1.89x）
 
-This regression is specific to recursive generators. Non-recursive generators and stack-based iterators perform well:
-- Simple generators: JIT ~same as CPython
-- Stack-based iterators (non-recursive): JIT 3.1x faster than CPython
+这个回退是递归生成器特有的。非递归生成器和栈式迭代器表现良好：
+- 简单生成器：JIT 与 CPython ~相同
+- 栈式迭代器（非递归）：JIT 比 CPython 快 3.1x
 
-### Root Cause Hypothesis
+### 根本原因假设
 
-The regression appears to be caused by inefficient code generation for recursive generator patterns, specifically:
-- Generator frame creation/destruction overhead
-- Yield-from state machine implementation
-- Suboptimal memory access patterns or register allocation
+回退似乎是由递归生成器模式的低效代码生成引起的，具体包括：
+- 生成器帧创建/销毁开销
+- Yield-from 状态机实现
+- 次优的内存访问模式或寄存器分配
 
-## 2. Optimization Goal
+## 2. 优化目标
 
-### Primary Objective
+### 主要目标
 
-Eliminate the 1.8-1.9x performance regression and restore JIT-compiled recursive generators to at least CPython interpreter baseline performance.
+消除 1.8-1.9x 性能回退，将 JIT 编译的递归生成器恢复到至少 CPython 解释器基线性能。
 
-### Quantitative Targets
+### 量化目标
 
-| Metric | Current | Target |
-|--------|---------|--------|
-| CPython baseline (Docker ARM64) | ~35.7ms | N/A |
-| CinderX JIT (Docker ARM64) | ~67.5ms | **≤35.7ms** |
-| Slowdown factor | 1.89x | **≤1.0x** |
+| 指标 | 当前 | 目标 |
+|------|------|------|
+| CPython 基线（Docker ARM64） | ~35.7ms | N/A |
+| CinderX JIT（Docker ARM64） | ~67.5ms | **≤35.7ms** |
+| 慢化因子 | 1.89x | **≤1.0x** |
 
-### Constraints
+### 约束条件
 
-1. **No performance regression for other code**: Non-recursive generators, normal functions, and other JIT-compiled code must not slow down
-2. **Pass existing tests**: Must pass all CinderX test suites (test_jit*.py, test_cinderx.py, etc.)
-3. **ARM Docker validation**: Must validate with pyperformance generators benchmark in ARM Docker container
+1. **不影响其他代码性能**：非递归生成器、普通函数和其他 JIT 编译的代码不能变慢
+2. **通过现有测试**：必须通过所有 CinderX 测试套件（test_jit*.py, test_cinderx.py 等）
+3. **ARM Docker 验证**：必须在 ARM Docker 容器中用 pyperformance generators benchmark 验证
 
-### Optimization Scope
+### 优化范围
 
-- **Phase 1**: Optimize `Tree.__iter__` pattern specifically (recursive + yield from on self attributes)
-- **Future**: Consider generalization to similar patterns based on learnings
+- **阶段 1**：专门优化 `Tree.__iter__` 模式（递归 + 在 self 属性上的 yield from）
+- **未来**：根据经验考虑泛化到类似模式
 
-## 3. Diagnostic Phase (Phase 0)
+## 3. 诊断阶段（Phase 0）
 
-### 3.1 macOS Local Validation (Fast Iteration)
+### 3.1 macOS 本地验证（快速迭代）
 
-**Objective**: Locate performance bottleneck quickly with easy iteration
+**目标**：通过简单迭代快速定位性能瓶颈
 
-**Checkpoint 1: JIT Execution Path Verification**
+**检查点 1：JIT 执行路径验证**
 ```python
-import cinderx.jit as jit
-jit.enable()
-jit.force_compile(Node.__iter__)
+import cinderjit
+cinderjit.enable()
+cinderjit.force_compile(Node.__iter__)
 
-# Verify compilation succeeded
-assert jit.is_jit_compiled(Node.__iter__)
-print(f"Compiled size: {jit.get_compiled_size(Node.__iter__)}")
+# 验证编译成功
+assert cinderjit.is_jit_compiled(Node.__iter__)
+print(f"编译大小: {cinderjit.get_compiled_size(Node.__iter__)}")
 
-# Run and check for deopt
+# 运行并检查反优化
 tree = build_tree(15)
 for _ in tree:
     pass
 
-# Check deopt count (should be 0 or very small)
+# 检查反优化计数（应为 0 或很小）
 ```
 
-**Checkpoint 2: Segmented Timing**
-Insert timing points in `Node.__iter__` to measure:
-- Frame creation time
-- Yield-from delegation time
-- Value yield time
-- Frame cleanup time
+**检查点 2：分段计时**
+在 `Node.__iter__` 中插入计时点以测量：
+- 帧创建时间
+- Yield-from 委托时间
+- 值 yield 时间
+- 帧清理时间
 
-**Checkpoint 3: Baseline Comparison**
-Compare three implementations:
-- Simple generator (known to have normal JIT performance)
-- Recursive generator (currently slow)
-- Stack-based iterator (known to be 3.1x faster)
+**检查点 3：基线对比**
+对比三种实现：
+- 简单生成器（已知 JIT 性能正常）
+- 递归生成器（当前慢）
+- 栈式迭代器（已知快 3.1x）
 
-### 3.2 Docker ARM64 Validation
+### 3.2 Docker ARM64 验证
 
-Replicate macOS findings in Docker ARM64 QEMU environment to confirm bottleneck consistency.
+在 Docker ARM64 QEMU 环境中复现 macOS 发现，确认瓶颈一致性。
 
-**Output**: Performance bottleneck identification report pinpointing which stage consumes the most time.
+**输出**：性能瓶颈识别报告，指出哪个阶段消耗最多时间。
 
-## 4. Optimization Phase (Based on Diagnostic Results)
+## 4. 优化阶段（基于诊断结果）
 
-### 4.1 If Bottleneck is Generator Frame Creation/Destruction
+### 4.1 如果瓶颈是生成器帧创建/销毁
 
-**Optimization Strategy A: Frame Pooling**
+**优化策略 A：帧池化**
 
-**Mechanism**:
-- Reuse frame objects for recursive generators
-- Mark recursive generators in HIR and generate fast path
-- Create frame only once, reuse on subsequent yield/resume
+**机制**：
+- 为递归生成器复用帧对象
+- 在 HIR 中标记递归生成器并生成快速路径
+- 只创建帧一次，在后续 yield/resume 时复用
 
-**Implementation Locations**:
-- `cinderx/Jit/hir/builder.cpp` - Mark recursive patterns during HIR construction
-- `cinderx/Jit/generators_*.cpp` - Add frame pooling logic
-- `cinderx/Jit/lir/generator.cpp` - Generate fast path code
+**实现位置**：
+- `cinderx/Jit/hir/builder.cpp` - 在 HIR 构建期间标记递归模式
+- `cinderx/Jit/generators_*.cpp` - 添加帧池化逻辑
+- `cinderx/Jit/lir/generator.cpp` - 生成快速路径代码
 
-**Expected Improvement**: 30-50%
+**预期改进**：30-50%
 
-### 4.2 If Bottleneck is Yield-From State Machine
+### 4.2 如果瓶颈是 Yield-From 状态机
 
-**Optimization Strategy B: Inline Yield-From**
+**优化策略 B：内联 Yield-From**
 
-**Mechanism**:
-- Detect `yield from self.left` pattern
-- Generate inline state transition code to avoid function call overhead
-- Similar to CPython's `SEND` + `YIELD_FROM` fast path
+**机制**：
+- 检测 `yield from self.left` 模式
+- 生成内联状态转换代码以避免函数调用开销
+- 类似 CPython 的 `SEND` + `YIELD_FROM` 快速路径
 
-**Implementation Locations**:
-- `cinderx/Jit/hir/builder.cpp` - Specialize `emitYieldFrom()`
-- `cinderx/Jit/hir/hir.h` - Add `InlineYieldFrom` instruction
+**实现位置**：
+- `cinderx/Jit/hir/builder.cpp` - 特化 `emitYieldFrom()`
+- `cinderx/Jit/hir/hir.h` - 添加 `InlineYieldFrom` 指令
 
-**Expected Improvement**: 20-40%
+**预期改进**：20-40%
 
-### 4.3 If Bottleneck is Memory Access/Register Allocation
+### 4.3 如果瓶颈是内存访问/寄存器分配
 
-**Optimization Strategy C: Improved Register Allocation**
+**优化策略 C：改进寄存器分配**
 
-**Mechanism**:
-- Reserve dedicated registers for recursive generators (self, left, right)
-- Reduce stack spill/load operations
-- Optimize register usage for `CheckField` / `LoadAttr`
+**机制**：
+- 为递归生成器保留专用寄存器（self, left, right）
+- 减少 stack spill/load 操作
+- 优化 `CheckField` / `LoadAttr` 的寄存器使用
 
-**Implementation Locations**:
-- `cinderx/Jit/lir/generator.cpp` - Improve register allocation strategy
-- `cinderx/Jit/hir/simplify.cpp` - Apply similar approach to existing `simplifyIsTruthy()`
+**实现位置**：
+- `cinderx/Jit/lir/generator.cpp` - 改进寄存器分配策略
+- `cinderx/Jit/hir/simplify.cpp` - 应用类似方法到现有的 `simplifyIsTruthy()`
 
-**Expected Improvement**: 10-30%
+**预期改进**：10-30%
 
-### 4.4 If Above Strategies Are Insufficient
+### 4.4 如果以上策略不足
 
-**Optimization Strategy D: HIR Transformation to Stack-Based Iterator**
+**优化策略 D：HIR 转换为栈式迭代器**
 
-**Mechanism**:
-- Detect `Tree.__iter__` pattern during HIR construction
-- Automatically transform to equivalent stack-based HIR
-- Generate non-recursive machine code
+**机制**：
+- 在 HIR 构建期间检测 `Tree.__iter__` 模式
+- 自动转换为等价的栈式 HIR
+- 生成非递归机器码
 
-**Implementation Locations**:
-- `cinderx/Jit/hir/builder.cpp` - Add pattern detection
-- New file: `cinderx/Jit/hir/generator_transforms.cpp`
+**实现位置**：
+- `cinderx/Jit/hir/builder.cpp` - 添加模式检测
+- 新文件：`cinderx/Jit/hir/generator_transforms.cpp`
 
-**Expected Improvement**: 200-300% (but high implementation complexity)
+**预期改进**：200-300%（但实现复杂度高）
 
-**Decision Point**: Only pursue Strategy D if Strategies A/B/C combined achieve <50% of target improvement.
+**决策点**：仅当策略 A/B/C 组合实现目标改进的 <50% 时才追求策略 D。
 
-## 5. Verification and Testing
+## 5. 验证和测试
 
-### 5.1 Unit Tests
+### 5.1 单元测试
 
-**New Test File**: `test_recursive_generator_perf.py`
+**新测试文件**：`test_recursive_generator_perf.py`
 
 ```python
 class TestRecursiveGeneratorOptimization:
     def test_tree_iter_compiled(self):
-        """Verify Tree.__iter__ is JIT compiled"""
-        jit.force_compile(Node.__iter__)
-        assert jit.is_jit_compiled(Node.__iter__)
+        """验证 Tree.__iter__ 被 JIT 编译"""
+        cinderjit.force_compile(Node.__iter__)
+        assert cinderjit.is_jit_compiled(Node.__iter__)
 
     def test_tree_iter_no_deopt(self):
-        """Verify no frequent deopt at runtime"""
+        """验证运行时没有频繁反优化"""
         tree = build_tree(10)
         for _ in tree:
             pass
-        # Check deopt count should be 0 or very small
+        # 检查反优化计数应为 0 或很小
 
     def test_correctness(self):
-        """Verify optimized result is correct"""
+        """验证优化后的结果正确"""
         tree = build_tree(15)
         result = list(tree)
         expected = list(range(1, 2**15))
         assert result == expected
 
     def test_performance_regression(self):
-        """Verify performance at least matches CPython"""
-        # Run 15 times, take median
-        # assert median_time <= CPython_baseline * 1.05  # Allow 5% tolerance
+        """验证性能至少匹配 CPython"""
+        # 运行 15 次，取中位数
+        # assert median_time <= CPython_baseline * 1.05  # 允许 5% 容差
 ```
 
-### 5.2 Regression Tests
+### 5.2 回归测试
 
-**Must Pass Existing Tests**:
-- `test_jit.py` - All JIT basic tests
-- `test_jit_generators.py` - Generator-related tests (if exists)
-- `test_cinderx.py` - CinderX comprehensive tests
+**必须通过的现有测试**：
+- `test_jit.py` - 所有 JIT 基础测试
+- `test_jit_generators.py` - 生成器相关测试（如果存在）
+- `test_cinderx.py` - CinderX 综合测试
 
-**Performance Regression Check**:
-- Run full pyperformance in Docker ARM64
-- Compare all benchmarks before/after optimization
-- Confirm no benchmark regresses >2%
+**性能回归检查**：
+- 在 Docker ARM64 中运行完整 pyperformance
+- 对比优化前后的所有 benchmark
+- 确认没有 benchmark 回退 >2%
 
-### 5.3 ARM Docker Validation Procedure
+### 5.3 ARM Docker 验证流程
 
 ```bash
-# In cpython-baseline container
+# 在 cpython-baseline 容器中
 cd /root/bm_generators
 
-# 1. Install new version
+# 1. 安装新版本
 pip install /dist/cinderx-*.whl --force-reinstall
 
-# 2. Correctness verification
+# 2. 正确性验证
 python3 -c "
 import sys
 sys.path.insert(0, '/root/bm_generators')
 from run_benchmark import Tree, build_tree
-import cinderx.jit as jit
-jit.enable()
-jit.force_compile(Tree.__iter__)
+import cinderjit
+cinderjit.enable()
+cinderjit.force_compile(Tree.__iter__)
 tree = build_tree(15)
 assert list(tree) == list(range(1, 2**15))
-print('Correctness OK')
+print('正确性 OK')
 "
 
-# 3. Performance verification
+# 3. 性能验证
 python3 << 'PY'
 import sys, statistics
 sys.path.insert(0, '/root/bm_generators')
 from run_benchmark import bench_generators
-import cinderx.jit as jit
-jit.enable()
+import cinderjit
+cinderjit.enable()
 
-# Warmup
+# 预热
 for _ in range(5):
     bench_generators(1)
 
-# Measure
+# 测量
 times = []
 for _ in range(15):
     times.append(bench_generators(1))
 
 print(f'CinderX JIT: {statistics.mean(times)*1000:.3f}ms ± {statistics.stdev(times)*1000:.3f}ms')
-print(f'Target: ≤35.7ms')
+print(f'目标: ≤35.7ms')
 PY
 ```
 
-## 6. Implementation Roadmap
+## 6. 实施路线图
 
-### Phase 0: Diagnosis (1-2 days)
-- [ ] macOS local: Verify JIT execution path, confirm no frequent deopt
-- [ ] macOS local: Segmented timing to locate bottleneck (frame creation vs yield-from vs other)
-- [ ] Docker ARM64: Replicate bottleneck, confirm consistency
-- [ ] **Deliverable**: Performance bottleneck identification report
+### Phase 0：诊断（1-2 天）
+- [ ] macOS 本地：验证 JIT 执行路径，确认无频繁反优化
+- [ ] macOS 本地：分段计时定位瓶颈（帧创建 vs yield-from vs 其他）
+- [ ] Docker ARM64：复现瓶颈，确认一致性
+- [ ] **交付物**：性能瓶颈识别报告
 
-### Phase 1: Quick Optimization (2-3 days)
-- [ ] Select matching optimization strategy (A/B/C) based on diagnosis results
-- [ ] Implement optimization (expected to modify 1-3 files)
-- [ ] Unit test verification
-- [ ] Docker ARM64 performance verification
-- [ ] **Go/No-Go Decision Point**: If improvement ≥50%, proceed to Phase 3; otherwise proceed to Phase 2
+### Phase 1：快速优化（2-3 天）
+- [ ] 根据诊断结果选择匹配的优化策略（A/B/C）
+- [ ] 实现优化（预计修改 1-3 个文件）
+- [ ] 单元测试验证
+- [ ] Docker ARM64 性能验证
+- [ ] **Go/No-Go 决策点**：如果改进 ≥50%，进入 Phase 3；否则进入 Phase 2
 
-### Phase 2: Deep Optimization (3-5 days, conditional)
-- [ ] Implement Strategy D (HIR transformation to stack-based iterator)
-- [ ] Full correctness testing
-- [ ] Docker ARM64 performance verification
-- [ ] Regression testing
+### Phase 2：深度优化（3-5 天，条件执行）
+- [ ] 实现策略 D（HIR 转换为栈式迭代器）
+- [ ] 完整正确性测试
+- [ ] Docker ARM64 性能验证
+- [ ] 回归测试
 
-### Phase 3: Integration and Validation (1-2 days)
-- [ ] Run full CinderX test suite
-- [ ] Run full pyperformance in Docker ARM64
-- [ ] Confirm no regression in other benchmarks
-- [ ] Code review
-- [ ] Documentation update
+### Phase 3：集成和验证（1-2 天）
+- [ ] 运行完整 CinderX 测试套件
+- [ ] 在 Docker ARM64 中运行完整 pyperformance
+- [ ] 确认其他 benchmark 无回退
+- [ ] 代码审查
+- [ ] 文档更新
 
-**Total Estimated Time**: 4-10 days (depending on whether Phase 2 is needed)
+**总预计时间**：4-10 天（取决于是否需要 Phase 2）
 
-## 7. Risks and Mitigations
+## 7. 风险和缓解措施
 
-| Risk | Probability | Impact | Mitigation |
-|------|-------------|--------|------------|
-| Diagnosis finds unclear bottleneck | Medium | Delay | Multi-angle analysis (perf, manual instrumentation, HIR dump) |
-| Phase 1 optimization insufficient | Medium | More time needed | Go/No-Go mechanism, timely switch to Phase 2 |
-| Phase 2 high implementation complexity | High | Delay | Can lower target (accept partial improvement) |
-| Optimization causes other benchmark regressions | Low | Blocks release | Rollback mechanism + full regression testing |
-| ARM Docker and real hardware behave differently | Low | Misjudgment | Reserve time for real hardware validation |
+| 风险 | 概率 | 影响 | 缓解措施 |
+|------|------|------|----------|
+| 诊断发现不明确的瓶颈 | 中 | 延期 | 多角度分析（perf、手动插桩、HIR dump） |
+| Phase 1 优化不足 | 中 | 需要更多时间 | Go/No-Go 机制，及时切换到 Phase 2 |
+| Phase 2 实现复杂度高 | 高 | 延期 | 可降低目标（接受部分改进） |
+| 优化导致其他 benchmark 回退 | 低 | 阻塞发布 | 回滚机制 + 完整回归测试 |
+| ARM Docker 和真实硬件表现不同 | 低 | 误判 | 预留真实硬件验证时间 |
 
-## 8. Success Criteria
+## 8. 成功标准
 
-The optimization will be considered successful if:
+优化将被视为成功，如果：
 
-1. **Performance**: CinderX JIT on recursive generators (Tree.__iter__) ≤ 35.7ms in ARM Docker (at least matching CPython baseline)
-2. **Correctness**: All existing CinderX tests pass
-3. **No Regressions**: No other pyperformance benchmark regresses >2%
-4. **Maintainability**: Code changes are well-documented and reviewed
+1. **性能**：CinderX JIT 在递归生成器（Tree.__iter__）上在 ARM Docker 中 ≤ 35.7ms（至少匹配 CPython 基线）
+2. **正确性**：所有现有 CinderX 测试通过
+3. **无回退**：没有其他 pyperformance benchmark 回退 >2%
+4. **可维护性**：代码变更经过良好文档化和审查
 
-## 9. Future Work
+## 9. 未来工作
 
-If this optimization is successful, potential follow-up work includes:
+如果此优化成功，潜在的后续工作包括：
 
-1. **Generalization**: Extend optimization to similar recursive generator patterns beyond Tree.__iter__
-2. **Proactive Optimization**: Add heuristics to detect and optimize recursive generators automatically
-3. **Documentation**: Document best practices for writing JIT-friendly recursive generators
-4. **Monitoring**: Add performance regression tests to CI/CD pipeline
+1. **泛化**：将优化扩展到 Tree.__iter__ 之外的类似递归生成器模式
+2. **主动优化**：添加启发式方法自动检测和优化递归生成器
+3. **文档**：记录编写 JIT 友好的递生成器的最佳实践
+4. **监控**：向 CI/CD 管道添加性能回归测试
