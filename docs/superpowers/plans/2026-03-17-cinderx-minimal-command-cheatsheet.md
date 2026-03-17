@@ -102,7 +102,33 @@ python -m pyperformance run --debug-single-value -b richards -o /root/work/arm-s
 
 ## 8. Docker ARM64 模拟（无 ARM 硬件时）
 
-### 8.1 构建 ARM64 wheel
+### 8.1 使用 Docker Compose（推荐）
+
+```bash
+# 构建 wheel
+cd /Users/luchen/Repo/cinderx
+./docker/cinderx-test/scripts/build-wheel.sh
+
+# 启动容器
+cd docker/cinderx-test
+docker-compose up -d
+
+# 安装依赖
+docker exec cinderx-arm64-test /scripts/setup.sh
+
+# Smoke 测试
+docker exec cinderx-arm64-test /scripts/smoke.sh
+
+# 性能对比测试
+docker exec cinderx-arm64-test /scripts/test-generators.sh
+
+# 清理
+docker-compose down
+```
+
+### 8.2 手动运行（不使用 Docker Compose）
+
+#### 8.2.1 构建 ARM64 wheel
 
 ```bash
 cd /Users/luchen/Repo/cinderx

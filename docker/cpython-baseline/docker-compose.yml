@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  cpython-baseline:
+    build: .
+    platform: linux/arm64
+    container_name: cpython-baseline-test
+    hostname: cpython-baseline
+
+    volumes:
+      # CinderX wheel files
+      - ../../dist:/dist:ro
+      # Results
+      - ./results:/results
+
+    # Keep container running
+    stdin_open: true
+    tty: true

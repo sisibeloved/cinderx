@@ -210,7 +210,84 @@ jit-effective-ok compiled_size ...
 
 如果没有远程 ARM Linux 主机，可以用 Docker 模拟 ARM64 环境做快速验证。
 
-#### 3.6.1 构建 ARM64 wheel
+#### 3.6.1 使用 Docker Compose 测试 CinderX（推荐）
+
+仓库提供了完整的 Docker 测试环境，用于对比 CPython baseline vs CinderX：
+
+**目录结构：**
+```
+cinderx/docker/cpython-baseline/
+├── Dockerfile              # 基于 Python 3.14 官方镜像
+├── docker-compose.yml      # 容器配置
+├── README.md               # 详细使用说明
+└── scripts/                # 测试脚本
+```
+
+**快速开始：**
+
+```bash
+# 1. 构建 CinderX wheel（在宿主机）
+cd /Users/luchen/Repo/cinderx
+docker run --rm --platform linux/arm64 \
+  -v "$PWD:/cinderx" -w /cinderx \
+  python:3.14-slim bash -c '
+    apt-get update -qq && apt-get install -y -qq build-essential cmake git > /dev/null
+    pip install --quiet build
+    export CMAKE_BUILD_PARALLEL_LEVEL=1
+    python -m build --wheel
+  '
+
+# 2. 启动测试容器
+cd docker/cpython-baseline
+docker compose up -d
+docker compose exec cpython-baseline bash
+
+# 3. 在容器内运行测试（详见 README.md）
+pip install /dist/cinderx-*-linux_aarch64.whl
+# ... 按照 README.md 中的步骤运行对比测试
+```
+
+**优点：**
+- ✅ 使用官方 Python 3.14 镜像，无需编译 CPython
+- ✅ 清晰的 baseline vs CinderX 对比
+- ✅ 测试步骤固化，可重复
+- ✅ 支持交互式探索
+
+详见：`/Users/luchen/Repo/cinderx/docker/cpython-baseline/README.md`
+
+#### 3.6.2 使用 Docker Compose（旧方案，已弃用）
+
+仓库提供了完整的 Docker Compose 测试环境：
+
+```bash
+# 1. 构建 ARM64 wheel
+cd /Users/luchen/Repo/cinderx
+./docker/cinderx-test/scripts/build-wheel.sh
+
+# 2. 启动容器
+cd docker/cinderx-test
+docker-compose up -d
+
+# 3. 安装依赖
+docker exec cinderx-arm64-test /scripts/setup.sh
+
+# 4. 运行 smoke 测试
+docker exec cinderx-arm64-test /scripts/smoke.sh
+
+# 5. 运行 generators benchmark 对比
+docker exec cinderx-arm64-test /scripts/test-generators.sh
+
+# 6. 清理
+docker-compose down
+```
+
+**优点：**
+- ✅ 容器配置固化在 docker-compose.yml
+- ✅ 测试步骤固化在脚本中，每次运行一致
+- ✅ 可以保留缓存（pyperformance 数据）加速后续测试
+- ✅ 支持 docker exec 进入容器交互式探索
+
+#### 3.6.2 手动构建 ARM64 wheel
 
 单线程构建（避免 OOM）：
 
