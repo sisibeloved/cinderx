@@ -915,9 +915,54 @@ Register* simplifyIsTruthy(Env& env, const IsTruthy* instr) {
   return nullptr;
 }
 
+// Profiling counters for yield-from optimization opportunities
+// These are thread-local to avoid synchronization overhead
+namespace {
+thread_local struct YieldFromProfileStats {
+  int64_t total_calls = 0;
+  int64_t env_disabled = 0;
+  int64_t not_tree_iter = 0;
+  int64_t missing_operands = 0;
+  int64_t not_load_attr = 0;
+  int64_t not_self_receiver = 0;
+  int64_t invalid_attr = 0;
+  int64_t optimization_detected = 0;
+
+  void dump() const {
+    JIT_LOG("=== YieldFrom Profiling Stats ===");
+    JIT_LOG("Total simplifyYieldFrom calls: ", total_calls);
+    JIT_LOG("  Environment disabled:     ", env_disabled);
+    JIT_LOG("  Not TreeIter code:        ", not_tree_iter);
+    JIT_LOG("  Missing operands:         ", missing_operands);
+    JIT_LOG("  Not LoadAttr:             ", not_load_attr);
+    JIT_LOG("  Not self receiver:        ", not_self_receiver);
+    JIT_LOG("  Invalid attribute:        ", invalid_attr);
+    JIT_LOG("  ✅ Optimization detected: ", optimization_detected);
+
+    if (total_calls > 0) {
+      double detection_rate =
+          (double)optimization_detected / total_calls * 100.0;
+      JIT_LOG("Detection rate: ", detection_rate, "%");
+    }
+    JIT_LOG("================================");
+  }
+} yieldFromStats;
+
+// Dump stats at JIT shutdown
+struct YieldFromProfileDumper {
+  ~YieldFromProfileDumper() {
+    if (yieldFromStats.total_calls > 0) {
+      yieldFromStats.dump();
+    }
+  }
+} yieldFromProfileDumper;
+} // anonymous namespace
+
 // Experimental: Inline yield-from for self.<attr> patterns
 // when enabled via PYTHONJIT_ARM_INLINE_YIELD_FROM
 Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
+  yieldFromStats.total_calls++;
+
   // Always log this for debugging
   const char* qualname = env.func.code && PyUnicode_Check(env.func.code->co_qualname)
       ? PyUnicode_AsUTF8(env.func.code->co_qualname)
@@ -928,11 +973,13 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
 
   if (!armInlineYieldFromEnabled()) {
     JIT_LOG("simplifyYieldFrom: PYTHONJIT_ARM_INLINE_YIELD_FROM not enabled");
+    yieldFromStats.env_disabled++;
     return nullptr;
   }
 
   if (!isGeneratorsTreeIterCode(env.func.code)) {
     JIT_LOG("simplifyYieldFrom: not TreeIter code");
+    yieldFromStats.not_tree_iter++;
     return nullptr;
   }
 
@@ -944,12 +991,14 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
 
   if (!iter || !send_value) {
     JIT_LOG("simplifyYieldFrom: missing operands");
+    yieldFromStats.missing_operands++;
     return nullptr;
   }
 
   // Check if iter comes from LoadAttr on self
   if (!iter->instr()->IsLoadAttr()) {
     JIT_LOG("simplifyYieldFrom: iter is not LoadAttr");
+    yieldFromStats.not_load_attr++;
     return nullptr;
   }
 
@@ -962,12 +1011,14 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
         "simplifyYieldFrom: receiver id is ",
         receiver->id(),
         ", not 0 (self)");
+    yieldFromStats.not_self_receiver++;
     return nullptr;
   }
 
   // Check if this is a safe attribute (left or right for Tree pattern)
   BorrowedRef<PyCodeObject> code = env.func.code;
   if (code == nullptr || load_attr->name_idx() >= PyTuple_GET_SIZE(code->co_names)) {
+    yieldFromStats.invalid_attr++;
     return nullptr;
   }
 
@@ -975,21 +1026,58 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
   const char* attr_str = PyUnicode_AsUTF8(attr_name);
   if (attr_str == nullptr) {
     PyErr_Clear();
+    yieldFromStats.invalid_attr++;
     return nullptr;
   }
 
   if (std::strcmp(attr_str, "left") != 0 && std::strcmp(attr_str, "right") != 0) {
     JIT_LOG("simplifyYieldFrom: attr is ", attr_str, ", not left or right");
+    yieldFromStats.invalid_attr++;
     return nullptr;
   }
 
-  // For now, return nullptr to indicate no change
-  // The actual inlining logic will be added in the next iteration
+  // Optimization opportunity detected!
+  yieldFromStats.optimization_detected++;
+
   const char* code_qualname = PyUnicode_AsUTF8(code->co_qualname);
   if (code_qualname == nullptr) {
     PyErr_Clear();
     return nullptr;
   }
+
+  JIT_LOG(
+      "✅ YieldFrom inline optimization opportunity: ",
+      code_qualname,
+      " attr=",
+      attr_str,
+      " (detected ",
+      yieldFromStats.optimization_detected,
+      " times)");
+
+  // Optimization: For Tree.__iter__ pattern, we can generate a faster yield-from
+  // path when we know the attribute is another Node object (which has __iter__
+  // already JIT-compiled).
+  //
+  // Original: yield from self.left/right
+  //
+  // Fast path (when left/right is not None and has __iter__ JIT-compiled):
+  //   if left is not None:
+  //     iter = left.__iter__()  // Fast call to JIT-compiled __iter__
+  //     yield from iter
+  //
+  // This avoids the overhead of:
+  // 1. Generic iterator protocol checks
+  // 2. Coroutine type checking (we know Node.__iter__ is a generator)
+  // 3. Multiple state transitions
+  //
+  // For now, we still use YieldFrom but we've validated the pattern.
+  // The actual optimization would require creating new basic blocks
+  // and is deferred until we have more infrastructure in place.
+  //
+  // Future work:
+  // - Create None check branch
+  // - Inline the iterator creation
+  // - Specialize for JIT-compiled __iter__ methods
 
   JIT_LOG(
       "YieldFrom inline optimization opportunity detected for ",
