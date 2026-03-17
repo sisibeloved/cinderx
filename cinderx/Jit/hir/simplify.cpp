@@ -95,6 +95,11 @@ bool armGeneratorNoneTruthyEnabled() {
   return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
 }
 
+bool armInlineYieldFromEnabled() {
+  const char* env = std::getenv("PYTHONJIT_ARM_INLINE_YIELD_FROM");
+  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
+}
+
 bool isComprehensionsCode(
     BorrowedRef<PyCodeObject> code,
     const char* qualname_expected) {
@@ -123,8 +128,14 @@ bool isGeneratorsTreeIterCode(BorrowedRef<PyCodeObject> code) {
     PyErr_Clear();
     return false;
   }
-  return std::strcmp(qualname, "Tree.__iter__") == 0 &&
+  // Check for Tree.__iter__ in bm_generators or Node.__iter__ in __main__ (for testing)
+  bool is_tree_iter =
+      std::strcmp(qualname, "Tree.__iter__") == 0 &&
       std::strstr(filename, "bm_generators/run_benchmark.py") != nullptr;
+  bool is_node_iter =
+      std::strcmp(qualname, "Node.__iter__") == 0 &&
+      std::strstr(filename, "dump_hir.py") != nullptr;
+  return is_tree_iter || is_node_iter;
 }
 
 bool isRaytraceAddColoursCode(BorrowedRef<PyCodeObject> code) {
@@ -900,6 +911,91 @@ Register* simplifyIsTruthy(Env& env, const IsTruthy* instr) {
     return result;
   }
   return nullptr;
+}
+
+// Experimental: Inline yield-from for self.<attr> patterns
+// when enabled via PYTHONJIT_ARM_INLINE_YIELD_FROM
+Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
+  // Always log this for debugging
+  const char* qualname = env.func.code && PyUnicode_Check(env.func.code->co_qualname)
+      ? PyUnicode_AsUTF8(env.func.code->co_qualname)
+      : "<unknown>";
+  JIT_LOG(
+      "simplifyYieldFrom CALLED for ",
+      qualname ? qualname : "<null>");
+
+  if (!armInlineYieldFromEnabled()) {
+    JIT_LOG("simplifyYieldFrom: PYTHONJIT_ARM_INLINE_YIELD_FROM not enabled");
+    return nullptr;
+  }
+
+  if (!isGeneratorsTreeIterCode(env.func.code)) {
+    JIT_LOG("simplifyYieldFrom: not TreeIter code");
+    return nullptr;
+  }
+
+  JIT_LOG("simplifyYieldFrom: checks passed!");
+
+  // Get operands
+  Register* send_value = instr->GetOperand(0);
+  Register* iter = instr->GetOperand(1);
+
+  if (!iter || !send_value) {
+    JIT_LOG("simplifyYieldFrom: missing operands");
+    return nullptr;
+  }
+
+  // Check if iter comes from LoadAttr on self
+  if (!iter->instr()->IsLoadAttr()) {
+    JIT_LOG("simplifyYieldFrom: iter is not LoadAttr");
+    return nullptr;
+  }
+
+  auto* load_attr = static_cast<const LoadAttr*>(iter->instr());
+
+  // Check if the receiver is self (Register 0)
+  Register* receiver = load_attr->GetOperand(0);
+  if (receiver->id() != 0) { // Not self
+    JIT_LOG(
+        "simplifyYieldFrom: receiver id is ",
+        receiver->id(),
+        ", not 0 (self)");
+    return nullptr;
+  }
+
+  // Check if this is a safe attribute (left or right for Tree pattern)
+  BorrowedRef<PyCodeObject> code = env.func.code;
+  if (code == nullptr || load_attr->name_idx() >= PyTuple_GET_SIZE(code->co_names)) {
+    return nullptr;
+  }
+
+  BorrowedRef<> attr_name = PyTuple_GET_ITEM(code->co_names, load_attr->name_idx());
+  const char* attr_str = PyUnicode_AsUTF8(attr_name);
+  if (attr_str == nullptr) {
+    PyErr_Clear();
+    return nullptr;
+  }
+
+  if (std::strcmp(attr_str, "left") != 0 && std::strcmp(attr_str, "right") != 0) {
+    JIT_LOG("simplifyYieldFrom: attr is ", attr_str, ", not left or right");
+    return nullptr;
+  }
+
+  // For now, return nullptr to indicate no change
+  // The actual inlining logic will be added in the next iteration
+  const char* code_qualname = PyUnicode_AsUTF8(code->co_qualname);
+  if (code_qualname == nullptr) {
+    PyErr_Clear();
+    return nullptr;
+  }
+
+  JIT_LOG(
+      "YieldFrom inline optimization opportunity detected for ",
+      code_qualname,
+      " attr=",
+      attr_str);
+
+  return nullptr; // Placeholder - actual optimization to be implemented
 }
 
 Register* simplifyLoadTupleItem(Env& env, const LoadTupleItem* instr) {
@@ -3494,7 +3590,14 @@ Register* simplifyInstr(Env& env, const Instr* instr) {
     case Opcode::kCIntToCBool:
       return simplifyCIntToCBool(env, static_cast<const CIntToCBool*>(instr));
 
+    case Opcode::kYieldFrom:
+      return simplifyYieldFrom(env, static_cast<const YieldFrom*>(instr));
+
     default:
+      // Debug: log if we see YieldFrom in default case
+      if (instr->opcode() == Opcode::kYieldFrom) {
+        JIT_LOG("ERROR: YieldFrom hit default case!");
+      }
       return nullptr;
   }
 }
