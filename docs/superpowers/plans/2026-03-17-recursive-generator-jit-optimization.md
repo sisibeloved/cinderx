@@ -1,45 +1,45 @@
-# Recursive Generator JIT Optimization Implementation Plan
+# 递归生成器 JIT 优化实施计划
 
-> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **对于智能代理工作者：** 必需：使用 superpowers:subagent-driven-development（如果有子代理）或 superpowers:executing-plans 来执行此计划。步骤使用复选框（`- [ ]`）语法进行跟踪。
 
-**Goal:** Eliminate 1.8-1.9x performance regression in JIT-compiled recursive generators (Tree.__iter__ pattern)
+**目标：** 消除 JIT 编译递归生成器（Tree.__iter__ 模式）中的 1.8-1.9x 性能回退
 
-**Architecture:** Data-driven optimization - diagnose bottleneck first, then apply targeted fix (frame pooling / yield-from inlining / register allocation), fallback to HIR transformation if needed
+**架构：** 数据驱动优化 - 先诊断瓶颈，再应用针对性修复（帧池化 / yield-from 内联 / 寄存器分配），如不足则回退到 HIR 转换
 
-**Tech Stack:** Python 3.14, CinderX JIT, C++ (HIR/LIR), Docker ARM64 QEMU
+**技术栈：** Python 3.14, CinderX JIT, C++ (HIR/LIR), Docker ARM64 QEMU
 
 ---
 
-## Chunk 1: Diagnostic Phase (Phase 0)
+## 块 1：诊断阶段（Phase 0）
 
-**Working Directory:** `/Users/luchen/Agents-Repo/Claude-Code/cinderx`
+**工作目录：** `/Users/luchen/Agents-Repo/Claude-Code/cinderx`
 
-### Task 1: Create Diagnostic Infrastructure
+### 任务 1：创建诊断基础设施
 
-**Files:**
-- Create: `scripts/diagnostics/benchmark_recursive_generator.py`
-- Create: `scripts/diagnostics/` directory if needed
+**文件：**
+- 创建：`scripts/diagnostics/benchmark_recursive_generator.py`
+- 创建：`scripts/diagnostics/` 目录（如需要）
 
-- [ ] **Step 1: Create diagnostic directories**
+- [ ] **步骤 1：创建诊断目录**
 
-Run:
+运行：
 ```bash
 cd /Users/luchen/Agents-Repo/Claude-Code/cinderx
 mkdir -p scripts/diagnostics
 mkdir -p docs/superpowers/diagnostics
 ```
 
-Expected: Both directories created successfully
+预期：两个目录创建成功
 
-- [ ] **Step 2: Write benchmark harness script**
+- [ ] **步骤 2：编写基准测试工具脚本**
 
-Create `scripts/diagnostics/benchmark_recursive_generator.py`:
+创建 `scripts/diagnostics/benchmark_recursive_generator.py`：
 
 ```python
 #!/usr/bin/env python3
 """
-Benchmark harness for recursive generator performance analysis.
-Compares CPython interpreter vs CinderX JIT for Tree.__iter__ pattern.
+递归生成器性能分析基准测试工具。
+比较 CPython 解释器与 CinderX JIT 在 Tree.__iter__ 模式下的性能。
 """
 
 import sys
@@ -47,11 +47,11 @@ import time
 import statistics
 from pathlib import Path
 
-# Add PythonLib to path for cinderx imports
+# 添加 PythonLib 到路径以便导入 cinderx
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "cinderx" / "PythonLib"))
 
 class Node:
-    """Tree node with recursive generator iterator."""
+    """使用递归生成器迭代器的树节点。"""
 
     def __init__(self, value, left=None, right=None):
         self.value = value
@@ -67,7 +67,7 @@ class Node:
 
 
 class StackNode:
-    """Tree node with stack-based (non-recursive) iterator."""
+    """使用栈式（非递归）迭代器的树节点。"""
 
     def __init__(self, value, left=None, right=None):
         self.value = value
@@ -89,7 +89,7 @@ class StackNode:
 
 
 def build_tree(node_cls, depth):
-    """Build balanced binary tree."""
+    """构建平衡二叉树。"""
     if depth == 0:
         return None
     mid = 2 ** (depth - 1)
@@ -101,7 +101,7 @@ def build_tree(node_cls, depth):
 
 
 def traverse(tree):
-    """Traverse tree and return sum."""
+    """遍历树并返回总和。"""
     s = 0
     for v in tree:
         s += v
@@ -109,7 +109,7 @@ def traverse(tree):
 
 
 def bench(tree, iterations=10):
-    """Benchmark tree traversal."""
+    """基准测试树遍历。"""
     times = []
     for _ in range(iterations):
         start = time.perf_counter()
@@ -120,49 +120,49 @@ def bench(tree, iterations=10):
 
 def main():
     print("=" * 60)
-    print("Recursive Generator Performance Diagnostic")
+    print("递归生成器性能诊断")
     print("=" * 60)
 
     depth = 15
     iterations = 15
 
-    # Test 1: Recursive generator (baseline)
-    print("\n[1] Recursive Generator (Tree.__iter__)")
+    # 测试 1：递归生成器（基线）
+    print("\n[1] 递归生成器 (Tree.__iter__)")
     tree1 = build_tree(Node, depth)
     mean, std = bench(tree1, iterations)
-    print(f"    Time: {mean*1000:.3f}ms ± {std*1000:.3f}ms")
+    print(f"    时间: {mean*1000:.3f}ms ± {std*1000:.3f}ms")
 
-    # Test 2: Stack-based iterator
-    print("\n[2] Stack-Based Iterator (StackNode.__iter__)")
+    # 测试 2：栈式迭代器
+    print("\n[2] 栈式迭代器 (StackNode.__iter__)")
     tree2 = build_tree(StackNode, depth)
     mean2, std2 = bench(tree2, iterations)
-    print(f"    Time: {mean2*1000:.3f}ms ± {std2*1000:.3f}ms")
-    print(f"    Speedup: {mean/mean2:.2f}x")
+    print(f"    时间: {mean2*1000:.3f}ms ± {std2*1000:.3f}ms")
+    print(f"    加速比: {mean/mean2:.2f}x")
 
-    # Test 3: With CinderX JIT (if available)
+    # 测试 3：使用 CinderX JIT（如果可用）
     try:
         import cinderjit
         cinderjit.enable()
 
-        print("\n[3] CinderX JIT (Recursive Generator)")
+        print("\n[3] CinderX JIT（递归生成器）")
         tree3 = build_tree(Node, depth)
         cinderjit.force_compile(Node.__iter__)
 
-        # Warmup
+        # 预热
         for _ in range(5):
             traverse(tree3)
 
         mean3, std3 = bench(tree3, iterations)
-        print(f"    Time: {mean3*1000:.3f}ms ± {std3*1000:.3f}ms")
-        print(f"    vs baseline: {mean/mean3:.2f}x")
-        print(f"    vs stack-based: {mean2/mean3:.2f}x")
+        print(f"    时间: {mean3*1000:.3f}ms ± {std3*1000:.3f}ms")
+        print(f"    vs 基线: {mean/mean3:.2f}x")
+        print(f"    vs 栈式: {mean2/mean3:.2f}x")
 
-        # Compilation info
-        print(f"\n    Compiled: {cinderjit.is_jit_compiled(Node.__iter__)}")
-        print(f"    Size: {cinderjit.get_compiled_size(Node.__iter__)} bytes")
+        # 编译信息
+        print(f"\n    已编译: {cinderjit.is_jit_compiled(Node.__iter__)}")
+        print(f"    代码大小: {cinderjit.get_compiled_size(Node.__iter__)} bytes")
 
     except ImportError:
-        print("\n[3] CinderX not available, skipping JIT test")
+        print("\n[3] CinderX 不可用，跳过 JIT 测试")
 
     print("\n" + "=" * 60)
 
@@ -171,74 +171,74 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 3: Make script executable**
+- [ ] **步骤 3：使脚本可执行**
 
-Run:
+运行：
 ```bash
 chmod +x scripts/diagnostics/benchmark_recursive_generator.py
 ```
 
-Expected: No output, permissions updated
+预期：无输出，权限已更新
 
-- [ ] **Step 4: Test baseline benchmark (without JIT)**
+- [ ] **步骤 4：测试基线基准（不使用 JIT）**
 
-Run:
+运行：
 ```bash
 python3 scripts/diagnostics/benchmark_recursive_generator.py 2>&1 | tee docs/superpowers/diagnostics/macos-baseline.txt
 ```
 
-Expected output (approximate - actual values depend on hardware):
+预期输出（近似值 - 实际值取决于硬件）：
 ```
 ============================================================
-Recursive Generator Performance Diagnostic
+递归生成器性能诊断
 ============================================================
 
-[1] Recursive Generator (Tree.__iter__)
-    Time: 12.000-15.000ms ± 0.100-0.300ms
+[1] 递归生成器 (Tree.__iter__)
+    时间: 12.000-15.000ms ± 0.100-0.300ms
 
-[2] Stack-Based Iterator (StackNode.__iter__)
-    Time: 3.000-5.000ms ± 0.050-0.150ms
-    Speedup: 2.8-4.0x
+[2] 栈式迭代器 (StackNode.__iter__)
+    时间: 3.000-5.000ms ± 0.050-0.150ms
+    加速比: 2.8-4.0x
 
-[3] CinderX not available, skipping JIT test
+[3] CinderX 不可用，跳过 JIT 测试
 ============================================================
 ```
 
-**Success criteria:**
-- Baseline (recursive): 10-16ms range
-- Stack-based: 2-6ms range
-- Stack-based faster than recursive by 2.5-4.5x
+**成功标准：**
+- 基线（递归）：10-16ms 范围
+- 栈式：2-6ms 范围
+- 栈式比递归快 2.5-4.5 倍
 
-Note: Values outside these ranges may indicate platform differences or performance variations. That's OK for diagnostic purposes - we're looking for relative performance patterns, not absolute numbers.
+注意：超出这些范围的值可能表示平台差异或性能变化。这对诊断目的来说是 OK 的 - 我们要找的是相对性能模式，而不是绝对数值。
 
-- [ ] **Step 5: Commit diagnostic harness**
+- [ ] **步骤 5：提交诊断工具**
 
-Run:
+运行：
 ```bash
 git add scripts/diagnostics/benchmark_recursive_generator.py docs/superpowers/diagnostics/
-git commit -m "diag: add recursive generator benchmark harness
+git commit -m "diag: 添加递归生成器基准测试工具
 
-Baseline comparison for recursive vs stack-based iterators.
-Measures performance to identify JIT optimization opportunities."
+基线对比：递归 vs 栈式迭代器。
+测量性能以识别 JIT 优化机会。"
 ```
 
-Expected: Git commit created successfully
+预期：Git 提交创建成功
 
 ---
 
-### Task 2: Add Segmented Timing Analysis
+### 任务 2：添加分段计时分析
 
-**Files:**
-- Create: `scripts/diagnostics/profile_generator_phases.py`
+**文件：**
+- 创建：`scripts/diagnostics/profile_generator_phases.py`
 
-- [ ] **Step 1: Write phase profiler script**
+- [ ] **步骤 1：编写阶段分析器脚本**
 
-Create `scripts/diagnostics/profile_generator_phases.py`:
+创建 `scripts/diagnostics/profile_generator_phases.py`：
 
 ```python
 #!/usr/bin/env python3
 """
-Profile individual phases of generator execution to identify bottlenecks.
+对生成器执行的各个阶段进行性能分析，以识别瓶颈。
 """
 
 import sys
@@ -249,9 +249,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "cinderx" / "Python
 
 
 class ProfiledNode:
-    """Node with instrumented __iter__ for phase timing."""
+    """带有阶段计时插桩的节点。"""
 
-    # Class-level counters for timing
+    # 类级别计时计数器
     frame_create_time = 0.0
     yield_from_delegate_time = 0.0
     yield_value_time = 0.0
@@ -264,31 +264,31 @@ class ProfiledNode:
         self.right = right
 
     def __iter__(self):
-        # Measure frame creation (first time only per call)
+        # 测量帧创建（每次调用仅第一次）
         start_frame = time.perf_counter()
         ProfiledNode.call_count += 1
         ProfiledNode.frame_create_time += time.perf_counter() - start_frame
 
         try:
-            # Measure yield-from delegation
+            # 测量 yield-from 委托
             if self.left:
                 start_delegate = time.perf_counter()
                 for v in self.left:
                     ProfiledNode.yield_from_delegate_time += time.perf_counter() - start_delegate
 
-                    # Measure value yield
+                    # 测量值 yield
                     start_yield = time.perf_counter()
                     yield v
                     ProfiledNode.yield_value_time += time.perf_counter() - start_yield
 
                     start_delegate = time.perf_counter()
 
-            # Measure yield of own value
+            # 测量自身值的 yield
             start_yield = time.perf_counter()
             yield self.value
             ProfiledNode.yield_value_time += time.perf_counter() - start_yield
 
-            # Measure yield-from delegation (right)
+            # 测量 yield-from 委托（右子树）
             if self.right:
                 start_delegate = time.perf_counter()
                 for v in self.right:
@@ -301,7 +301,7 @@ class ProfiledNode:
                     start_delegate = time.perf_counter()
 
         finally:
-            # Measure cleanup
+            # 测量清理
             start_cleanup = time.perf_counter()
             pass
             ProfiledNode.frame_cleanup_time += time.perf_counter() - start_cleanup
@@ -319,17 +319,17 @@ class ProfiledNode:
         total = (cls.frame_create_time + cls.yield_from_delegate_time +
                  cls.yield_value_time + cls.frame_cleanup_time)
 
-        print(f"\nPhase Timing Breakdown:")
-        print(f"  Total measured time: {total*1000:.3f}ms")
-        print(f"  Frame creation:      {cls.frame_create_time*1000:.3f}ms ({cls.frame_create_time/total*100:.1f}%)")
-        print(f"  Yield-from delegate: {cls.yield_from_delegate_time*1000:.3f}ms ({cls.yield_from_delegate_time/total*100:.1f}%)")
-        print(f"  Yield value:         {cls.yield_value_time*1000:.3f}ms ({cls.yield_value_time/total*100:.1f}%)")
-        print(f"  Frame cleanup:       {cls.frame_cleanup_time*1000:.3f}ms ({cls.frame_cleanup_time/total*100:.1f}%)")
-        print(f"  Call count:          {cls.call_count}")
+        print(f"\n阶段计时分析：")
+        print(f"  总测量时间: {total*1000:.3f}ms")
+        print(f"  帧创建:      {cls.frame_create_time*1000:.3f}ms ({cls.frame_create_time/total*100:.1f}%)")
+        print(f"  Yield-from 委托: {cls.yield_from_delegate_time*1000:.3f}ms ({cls.yield_from_delegate_time/total*100:.1f}%)")
+        print(f"  值 yield:         {cls.yield_value_time*1000:.3f}ms ({cls.yield_value_time/total*100:.1f}%)")
+        print(f"  帧清理:       {cls.frame_cleanup_time*1000:.3f}ms ({cls.frame_cleanup_time/total*100:.1f}%)")
+        print(f"  调用次数:          {cls.call_count}")
 
 
 def build_profiled_tree(depth):
-    """Build profiled tree."""
+    """构建分析树。"""
     if depth == 0:
         return None
     mid = 2 ** (depth - 1)
@@ -342,23 +342,23 @@ def build_profiled_tree(depth):
 
 def main():
     print("=" * 60)
-    print("Generator Phase Profiling")
+    print("生成器阶段性能分析")
     print("=" * 60)
 
     depth = 15
 
-    # Build and traverse profiled tree
-    print(f"\nBuilding tree (depth={depth})...")
+    # 构建并遍历分析树
+    print(f"\n构建树（深度={depth}）...")
     tree = build_profiled_tree(depth)
 
-    print("Traversing tree...")
+    print("遍历树...")
     ProfiledNode.reset_stats()
 
     s = 0
     for v in tree:
         s += v
 
-    print(f"Sum: {s}")
+    print(f"总和: {s}")
     ProfiledNode.print_stats()
 
     print("\n" + "=" * 60)
@@ -368,79 +368,81 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Make executable**
+- [ ] **步骤 2：使脚本可执行**
 
-Run:
+运行：
 ```bash
 chmod +x scripts/diagnostics/profile_generator_phases.py
 ```
 
-Expected: No output
+预期：无输出
 
-- [ ] **Step 3: Test phase profiler**
+- [ ] **步骤 3：测试阶段分析器**
 
-Run:
+运行：
 ```bash
 python3 scripts/diagnostics/profile_generator_phases.py
 ```
 
-Expected output:
+预期输出：
 ```
 ============================================================
-Generator Phase Profiling
+生成器阶段性能分析
 ============================================================
 
-Building tree (depth=15)...
-Traversing tree...
-Sum: <large number>
+构建树（深度=15）...
+遍历树...
+总和: <大数字>
 
-Phase Timing Breakdown:
-  Total measured time: ~12-14ms
-  Frame creation:      ~Xms (X%)
-  Yield-from delegate: ~Yms (Y%)
-  Yield value:         ~Zms (Z%)
-  Frame cleanup:       ~Wms (W%)
-  Call count: 2^15 - 1 = 32767
+阶段计时分析：
+  总测量时间: ~12-14ms
+  帧创建:      ~Xms (X%)
+  Yield-from 委托: ~Yms (Y%)
+  值 yield:         ~Zms (Z%)
+  帧清理:       ~Wms (W%)
+  调用次数:          2^15 - 1 = 32767
 
 ============================================================
 ```
 
-Note: Percentages will identify the bottleneck phase
+注意：百分比将识别瓶颈阶段
 
-- [ ] **Step 4: Commit phase profiler**
+**关键输出：** 最高百分比的阶段是我们的优化目标！
 
-Run:
+- [ ] **步骤 4：提交阶段分析器**
+
+运行：
 ```bash
 git add scripts/diagnostics/profile_generator_phases.py
-git commit -m "diag: add generator phase profiler
+git commit -m "diag: 添加生成器阶段分析器
 
-Instruments generator execution to measure time spent in:
-- Frame creation
-- Yield-from delegation
-- Value yielding
-- Frame cleanup
+对生成器执行进行插桩以测量时间消耗：
+- 帧创建
+- Yield-from 委托
+- 值 yield
+- 帧清理
 
-Helps identify bottleneck for targeted optimization."
+帮助识别瓶颈以进行针对性优化。"
 ```
 
-Expected: Commit created
+预期：提交创建成功
 
 ---
 
-### Task 3: Verify JIT Execution Path
+### 任务 3：验证 JIT 执行路径
 
-**Files:**
-- Create: `scripts/diagnostics/verify_jit_path.py`
+**文件：**
+- 创建：`scripts/diagnostics/verify_jit_path.py`
 
-- [ ] **Step 1: Write JIT verification script**
+- [ ] **步骤 1：编写 JIT 验证脚本**
 
-Create `scripts/diagnostics/verify_jit_path.py`:
+创建 `scripts/diagnostics/verify_jit_path.py`：
 
 ```python
 #!/usr/bin/env python3
 """
-Verify that JIT compilation is working correctly for recursive generators.
-Check for deoptimizations and compilation status.
+验证 JIT 编译对递归生成器是否正常工作。
+检查反优化和编译状态。
 """
 
 import sys
@@ -471,57 +473,57 @@ def build_tree(depth):
 
 def main():
     print("=" * 60)
-    print("JIT Execution Path Verification")
+    print("JIT 执行路径验证")
     print("=" * 60)
 
     try:
         import cinderjit
     except ImportError:
-        print("\nERROR: CinderX not available")
-        print("Please build and install CinderX first:")
+        print("\n错误：CinderX 不可用")
+        print("请先构建并安装 CinderX：")
         print("  pip install -e . --no-build-isolation")
         return 1
 
-    print("\n[1] Enabling JIT...")
+    print("\n[1] 启用 JIT...")
     cinderjit.enable()
-    print("    ✓ JIT enabled")
+    print("    ✓ JIT 已启用")
 
-    print("\n[2] Force compiling Node.__iter__...")
+    print("\n[2] 强制编译 Node.__iter__...")
     cinderjit.force_compile(Node.__iter__)
-    print("    ✓ Compilation requested")
+    print("    ✓ 编译已请求")
 
-    print("\n[3] Checking compilation status...")
+    print("\n[3] 检查编译状态...")
     is_compiled = cinderjit.is_jit_compiled(Node.__iter__)
-    print(f"    Compiled: {is_compiled}")
+    print(f"    已编译: {is_compiled}")
 
     if is_compiled:
         size = cinderjit.get_compiled_size(Node.__iter__)
-        print(f"    Code size: {size} bytes")
+        print(f"    代码大小: {size} bytes")
     else:
-        print("    ERROR: Function not compiled!")
+        print("    错误：函数未编译！")
         return 1
 
-    print("\n[4] Building test tree...")
+    print("\n[4] 构建测试树...")
     tree = build_tree(10)
-    print("    ✓ Tree built (depth=10)")
+    print("    ✓ 树已构建（深度=10）")
 
-    print("\n[5] Running traversal (should use JIT code)...")
+    print("\n[5] 运行遍历（应使用 JIT 代码）...")
     result = list(tree)
     expected = list(range(1, 2**10))
 
     if result == expected:
-        print("    ✓ Correctness verified")
+        print("    ✓ 正确性已验证")
     else:
-        print("    ERROR: Result mismatch!")
-        print(f"    Expected {len(expected)} items, got {len(result)}")
+        print("    错误：结果不匹配！")
+        print(f"    期望 {len(expected)} 项，得到 {len(result)} 项")
         return 1
 
-    print("\n[6] Checking for deoptimizations...")
-    # Note: CinderX may not expose deopt count directly, but we check what we can
-    print("    (Deopt checking not yet implemented - verify manually with JIT_LOG)")
+    print("\n[6] 检查反优化...")
+    # 注意：CinderX 可能不直接暴露反优化计数，但我们检查能检查的
+    print("    （反优化检查尚未实现 - 使用 JIT_LOG 手动验证）")
 
     print("\n" + "=" * 60)
-    print("✓ All checks passed")
+    print("✓ 所有检查通过")
     print("=" * 60)
     return 0
 
@@ -530,78 +532,78 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **Step 2: Make executable**
+- [ ] **步骤 2：使脚本可执行**
 
-Run:
+运行：
 ```bash
 chmod +x scripts/diagnostics/verify_jit_path.py
 ```
 
-Expected: No output
+预期：无输出
 
-- [ ] **Step 3: Test verification script (will fail without CinderX)**
+- [ ] **步骤 3：测试验证脚本（在 CinderX 构建前会失败）**
 
-Run:
+运行：
 ```bash
 python3 scripts/diagnostics/verify_jit_path.py
 ```
 
-Expected output (before CinderX build):
+预期输出（CinderX 构建前）：
 ```
 ============================================================
-JIT Execution Path Verification
+JIT 执行路径验证
 ============================================================
 
-ERROR: CinderX not available
-Please build and install CinderX first:
+错误：CinderX 不可用
+请先构建并安装 CinderX：
   pip install -e . --no-build-isolation
 ```
 
-Note: This is expected - will pass after Task 4
+注意：这是预期的 - 将在任务 4 后通过
 
-- [ ] **Step 4: Commit verification script**
+- [ ] **步骤 4：提交验证脚本**
 
-Run:
+运行：
 ```bash
 git add scripts/diagnostics/verify_jit_path.py
-git commit -m "diag: add JIT execution path verifier
+git commit -m "diag: 添加 JIT 执行路径验证器
 
-Checks that:
-- JIT is enabled and functional
-- Node.__iter__ is compiled
-- Compiled code produces correct results
-- No obvious execution path issues"
+检查：
+- JIT 是否启用并正常运行
+- Node.__iter__ 是否已编译
+- 编译后的代码是否产生正确结果
+- 没有明显的执行路径问题"
 ```
 
-Expected: Commit created
+预期：提交创建成功
 
 ---
 
-### Task 4: Run Diagnostic Suite in macOS
+### 任务 4：在 macOS 上运行诊断套件
 
-**Working Directory:** `/Users/luchen/Agents-Repo/Claude-Code/cinderx`
+**工作目录：** `/Users/luchen/Agents-Repo/Claude-Code/cinderx`
 
-- [ ] **Step 0: Check build prerequisites**
+- [ ] **步骤 0：检查构建前提条件**
 
-Run:
+运行：
 ```bash
 gcc-15 --version | head -1
 g++-15 --version | head -1
 python3 --version
 ```
 
-Expected:
+预期：
 ```
 gcc-15 (GCC) 15.x.x
 g++-15 (GCC) 15.x.x
 Python 3.14.x
 ```
 
-If commands fail, install GCC 15 first or modify build command to use `clang` instead.
+如果命令失败，先安装 GCC 15 或修改构建命令使用 `clang` 代替。
 
-- [ ] **Step 1: Build CinderX locally**
+- [ ] **步骤 1：本地构建 CinderX**
 
-Run:
+运行：
 ```bash
 cd /Users/luchen/Agents-Repo/Claude-Code/cinderx
 
@@ -613,184 +615,183 @@ CXX=g++-15 \
 python3 -m pip install -e . --no-build-isolation
 ```
 
-Expected:
-- Build completes in 2-5 minutes
-- Final output: `Successfully installed cinderx-VERSION`
-- No build errors
+预期：
+- 构建在 2-5 分钟内完成
+- 最终输出：`Successfully installed cinderx-VERSION`
+- 无构建错误
 
-If build takes longer than 5 minutes, check for:
-- Missing dependencies (should auto-install)
-- Compiler warnings (acceptable, but errors are not)
-- Disk space issues
+如果构建超过 5 分钟，检查：
+- 缺少依赖项（应自动安装）
+- 编译器警告（可接受，但错误不可接受）
+- 磁盘空间问题
 
-- [ ] **Step 2: Verify JIT is working**
+- [ ] **步骤 2：验证 JIT 正常工作**
 
-Run:
+运行：
 ```bash
 python3 scripts/diagnostics/verify_jit_path.py
 ```
 
-Expected output:
+预期输出：
 ```
 ============================================================
-JIT Execution Path Verification
+JIT 执行路径验证
 ============================================================
 
-[1] Enabling JIT...
-    ✓ JIT enabled
+[1] 启用 JIT...
+    ✓ JIT 已启用
 
-[2] Force compiling Node.__iter__...
-    ✓ Compilation requested
+[2] 强制编译 Node.__iter__...
+    ✓ 编译已请求
 
-[3] Checking compilation status...
-    Compiled: True
-    Code size: <2000-3000> bytes
+[3] 检查编译状态...
+    已编译: True
+    代码大小: <2000-3000> bytes
 
-[4] Building test tree...
-    ✓ Tree built (depth=10)
+[4] 构建测试树...
+    ✓ 树已构建（深度=10）
 
-[5] Running traversal (should use JIT code)...
-    ✓ Correctness verified
+[5] 运行遍历（应使用 JIT 代码）...
+    ✓ 正确性已验证
 
-[6] Checking for deoptimizations...
-    (Deopt checking not yet implemented - verify manually with JIT_LOG)
+[6] 检查反优化...
+    （反优化检查尚未实现 - 使用 JIT_LOG 手动验证）
 
 ============================================================
-✓ All checks passed
+✓ 所有检查通过
 ============================================================
 ```
 
-- [ ] **Step 3: Run benchmark with JIT**
+- [ ] **步骤 3：使用 JIT 运行基准测试**
 
-Run:
+运行：
 ```bash
 python3 scripts/diagnostics/benchmark_recursive_generator.py 2>&1 | tee docs/superpowers/diagnostics/macos-jit-baseline.txt
 ```
 
-Expected output:
+预期输出：
 ```
 ============================================================
-Recursive Generator Performance Diagnostic
+递归生成器性能诊断
 ============================================================
 
-[1] Recursive Generator (Tree.__iter__)
-    Time: ~12-14ms ± 0.2ms
+[1] 递归生成器 (Tree.__iter__)
+    时间: ~12-14ms ± 0.2ms
 
-[2] Stack-Based Iterator (StackNode.__iter__)
-    Time: ~3-4ms ± 0.1ms
-    Speedup: 3.1-3.5x
+[2] 栈式迭代器 (StackNode.__iter__)
+    时间: ~3-4ms ± 0.1ms
+    加速比: 3.1-3.5x
 
-[3] CinderX JIT (Recursive Generator)
-    Time: ~21-23ms ± 0.3ms
-    vs baseline: 0.54-0.65x (SLOWER!)
-    vs stack-based: 0.17-0.19x
+[3] CinderX JIT（递归生成器）
+    时间: ~21-23ms ± 0.3ms
+    vs 基线: 0.54-0.65x (更慢！)
+    vs 栈式: 0.17-0.19x
 
-    Compiled: True
-    Size: <2000-3000> bytes
+    已编译: True
+    代码大小: <2000-3000> bytes
 ============================================================
 ```
 
-**CRITICAL:** This confirms the 1.8-1.9x regression we're trying to fix!
+**关键：** 这确认了我们试图修复的 1.8-1.9x 回退！
 
-- [ ] **Step 4: Run phase profiler with JIT**
+- [ ] **步骤 4：使用 JIT 运行阶段分析器**
 
-Run:
+运行：
 ```bash
 python3 scripts/diagnostics/profile_generator_phases.py 2>&1 | tee docs/superpowers/diagnostics/macos-jit-phases.txt
 ```
 
-Expected output:
+预期输出：
 ```
 ============================================================
-Generator Phase Profiling
+生成器阶段性能分析
 ============================================================
 
-Building tree (depth=15)...
-Traversing tree...
-Sum: <large number>
+构建树（深度=15）...
+遍历树...
+总和: <大数字>
 
-Phase Timing Breakdown:
-  Total measured time: ~21-23ms
-  Frame creation:      ~Xms (X%)
-  Yield-from delegate: ~Yms (Y%)
-  Yield value:         ~Zms (Z%)
-  Frame cleanup:       ~Wms (W%)
+阶段计时分析：
+  总测量时间: ~21-23ms
+  帧创建:      ~Xms (X%)
+  Yield-from 委托: ~Yms (Y%)
+  值 yield:         ~Zms (Z%)
+  帧清理:       ~Wms (W%)
 
 ============================================================
 ```
 
-**KEY OUTPUT:** The phase with highest % is our optimization target!
+**关键输出：** 最高百分比的阶段是我们的优化目标！
 
-- [ ] **Step 5: Create diagnostic report**
+- [ ] **步骤 5：创建诊断报告**
 
-Create `docs/superpowers/diagnostics/phase0-report.md`:
+创建 `docs/superpowers/diagnostics/phase0-report.md`：
 
 ```markdown
-# Phase 0 Diagnostic Report
+# Phase 0 诊断报告
 
-**Date**: 2026-03-17
-**Platform**: macOS ARM64 (local)
+**日期**: 2026-03-17
+**平台**: macOS ARM64（本地）
 
-## Summary
+## 摘要
 
-[PASTE macos-jit-baseline.txt OUTPUT HERE]
+[在此粘贴 macos-jit-baseline.txt 输出]
 
-## Phase Timing Analysis
+## 阶段计时分析
 
-[PASTE macos-jit-phases.txt OUTPUT HERE]
+[在此粘贴 macos-jit-phases.txt 输出]
 
-## Bottleneck Identification
+## 瓶颈识别
 
-Based on profiling results, the primary bottleneck is:
+基于性能分析结果，主要瓶颈是：
 
-**Phase**: [FRAME CREATION | YIELD-FROM DELEGATION | VALUE YIELDING | FRAME CLEANUP]
+**阶段**: [帧创建 | YIELD-FROM 委托 | 值 YIELD | 帧清理]
 
-**Percentage**: X%
+**百分比**: X%
 
-**Root cause hypothesis**:
-[Explain why this phase is slow based on the % and expected behavior]
+**根本原因假设**:
+[基于百分比和预期行为解释为什么这个阶段慢]
 
-## Next Steps
+## 下一步
 
-Optimization strategy selected: **[A | B | C | D]**
+选择的优化策略：**[A | B | C | D]**
 
-- [ ] Strategy A: Frame Pooling (if frame creation/cleanup is bottleneck)
-- [ ] Strategy B: Inline Yield-From (if yield-from delegation is bottleneck)
-- [ ] Strategy C: Improved Register Allocation (if value yielding is bottleneck)
-- [ ] Strategy D: HIR Transformation (if multiple phases or Strategy A-C insufficient)
+- [ ] 策略 A：帧池化（如果帧创建/清理是瓶颈）
+- [ ] 策略 B：内联 Yield-From（如果 yield-from 委托是瓶颈）
+- [ ] 策略 C：改进寄存器分配（如果值 yield 是瓶颈）
+- [ ] 策略 D：HIR 转换（如果多个阶段或策略 A-C 不足）
 
-**Target improvement**: At least 50% (to reach ~10-12ms)
+**目标改进**：至少 50%（达到 ~10-12ms）
 
-## Docker ARM64 Validation
+## Docker ARM64 验证
 
-TODO: Replicate these tests in Docker ARM64 to confirm consistency.
+TODO：在 Docker ARM64 中复现这些测试以确认一致性。
 ```
 
-- [ ] **Step 6: Commit diagnostic report**
+- [ ] **步骤 6：提交诊断报告**
 
-Run:
+运行：
 ```bash
 git add docs/superpowers/diagnostics/
-git commit -m "diag: add Phase 0 diagnostic results (macOS JIT)
+git commit -m "diag: 添加 Phase 0 诊断结果（macOS JIT）
 
-Baseline measurements and bottleneck identification for
-recursive generator optimization.
+递归生成器优化的基线测量和瓶颈识别。
 
-Key findings:
-- JIT regression: 1.8-1.9x slower than CPython
-- Bottleneck phase: [TBD based on results]
-- Target: ≤12-14ms (match CPython baseline)"
+关键发现：
+- JIT 回退：比 CPython 慢 1.8-1.9x
+- 瓶颈阶段：[基于结果待定]
+- 目标：≤12-14ms（匹配 CPython 基线）"
 ```
 
-Expected: Commit created
+预期：提交创建成功
 
 ---
 
-## Chunk 1 Complete
+## 块 1 完成
 
-**Decision Point:** Based on Phase 0 results, proceed to Chunk 2 with selected optimization strategy.
+**决策点：** 基于 Phase 0 结果，继续到块 2 并选择优化策略。
 
-**Files created in this chunk:**
+**本块创建的文件：**
 - `scripts/diagnostics/benchmark_recursive_generator.py`
 - `scripts/diagnostics/profile_generator_phases.py`
 - `scripts/diagnostics/verify_jit_path.py`
@@ -799,20 +800,20 @@ Expected: Commit created
 - `docs/superpowers/diagnostics/macos-jit-phases.txt`
 - `docs/superpowers/diagnostics/phase0-report.md`
 
-**Next chunk will:**
-- Analyze diagnostic results
-- Select optimization strategy (A/B/C/D)
-- Implement targeted fix
-- Verify improvement
+**下一块将：**
+- 分析诊断结果
+- 选择优化策略（A/B/C/D）
+- 实现针对性修复
+- 验证改进
 
 ---
 
-## Chunk 2: Optimization Implementation (Strategy TBD based on Phase 0 results)
+## 块 2：优化实现（策略基于 Phase 0 结果待定）
 
-[Will be filled in after Chunk 1 completes and bottleneck is identified]
+[将在块 1 完成并识别瓶颈后填写]
 
 ---
 
-## Chunk 3: Integration and Validation
+## 块 3：集成和验证
 
-[Will be filled in after Chunk 2 completes]
+[将在块 2 完成后填写]
