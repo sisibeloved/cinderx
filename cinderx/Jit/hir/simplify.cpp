@@ -134,7 +134,9 @@ bool isGeneratorsTreeIterCode(BorrowedRef<PyCodeObject> code) {
       std::strstr(filename, "bm_generators/run_benchmark.py") != nullptr;
   bool is_node_iter =
       std::strcmp(qualname, "Node.__iter__") == 0 &&
-      std::strstr(filename, "dump_hir.py") != nullptr;
+      (std::strstr(filename, "dump_hir.py") != nullptr ||
+       std::strstr(filename, "benchmark_recursive_generator.py") != nullptr ||
+       std::strstr(filename, "profile_generator_phases.py") != nullptr);
   return is_tree_iter || is_node_iter;
 }
 
