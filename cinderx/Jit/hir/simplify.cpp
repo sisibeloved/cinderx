@@ -995,14 +995,65 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
     return nullptr;
   }
 
+  Instr* iter_instr = iter->instr();
+
+  // Handle Phi node case - trace through the GetIter->LoadField chain
+  if (iter_instr->IsPhi()) {
+    JIT_LOG("simplifyYieldFrom: iter is Phi node");
+    auto* phi = static_cast<const Phi*>(iter_instr);
+    for (size_t i = 0; i < phi->NumOperands(); i++) {
+      Register* phi_input = phi->GetOperand(i);
+      Instr* phi_input_instr = phi_input->instr();
+
+      JIT_LOG(
+          "simplifyYieldFrom: checking Phi input {}", i);
+
+      // Check if this input is a GetIter instruction
+      if (phi_input_instr->IsGetIter()) {
+        JIT_LOG("simplifyYieldFrom: found GetIter in Phi");
+        auto* get_iter = static_cast<const GetIter*>(phi_input_instr);
+        Register* get_iter_source = get_iter->iterable();
+
+        // Check if GetIter's source is LoadField
+        Instr* source_instr = get_iter_source->instr();
+        JIT_LOG(
+            "simplifyYieldFrom: GetIter source is {}", source_instr->opname());
+        if (source_instr->IsLoadField()) {
+          JIT_LOG("simplifyYieldFrom: found LoadField after GetIter");
+          auto* load_field = static_cast<const LoadField*>(source_instr);
+          Register* receiver = load_field->receiver();
+
+          // Check if receiver is self (Register 0)
+          if (receiver->id() == 0) {
+            JIT_LOG("simplifyYieldFrom: receiver is self");
+            // Get the field name
+            std::string field_name(load_field->name());
+            if (field_name == "left" || field_name == "right") {
+              JIT_LOG(
+                  "simplifyYieldFrom: ✅ Phi->GetIter->LoadField(self) detected! field=",
+                  field_name.c_str());
+              yieldFromStats.optimization_detected++;
+              // TODO: Implement actual optimization
+              return nullptr;
+            }
+          }
+        }
+      }
+    }
+    // Not a Phi node pattern we can optimize
+    JIT_LOG("simplifyYieldFrom: Phi node doesn't match pattern");
+    yieldFromStats.not_load_attr++;
+    return nullptr;
+  }
+
   // Check if iter comes from LoadAttr on self
-  if (!iter->instr()->IsLoadAttr()) {
+  if (!iter_instr->IsLoadAttr()) {
     JIT_LOG("simplifyYieldFrom: iter is not LoadAttr");
     yieldFromStats.not_load_attr++;
     return nullptr;
   }
 
-  auto* load_attr = static_cast<const LoadAttr*>(iter->instr());
+  auto* load_attr = static_cast<const LoadAttr*>(iter_instr);
 
   // Check if the receiver is self (Register 0)
   Register* receiver = load_attr->GetOperand(0);
