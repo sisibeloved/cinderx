@@ -99,3 +99,101 @@ RECREATE_PYPERF_VENV=1 \
 . /root/venv-cinderx314/bin/activate
 python -m pyperformance run --debug-single-value -b richards -o /root/work/arm-sync/richards.json
 ```
+
+## 8. Docker ARM64 模拟（无 ARM 硬件时）
+
+### 8.1 构建 ARM64 wheel
+
+```bash
+cd /Users/luchen/Repo/cinderx
+
+docker run --rm --platform linux/arm64 \
+  -v "$PWD:/cinderx" \
+  -w /cinderx \
+  python:3.14-slim bash -c "
+    apt-get update -qq && apt-get install -y -qq build-essential cmake git > /dev/null 2>&1
+    pip install --quiet build
+    export CMAKE_BUILD_PARALLEL_LEVEL=1
+    export CINDERX_BUILD_JOBS=1
+    python -m build --wheel
+  "
+
+ls -lh dist/cinderx-*-linux_aarch64.whl
+```
+
+### 8.2 Docker smoke 测试
+
+```bash
+docker run --rm --platform linux/arm64 \
+  -v "$PWD/dist:/dist" \
+  python:3.14-slim bash -c "
+    pip install --quiet /dist/cinderx-*-linux_aarch64.whl
+
+    python3 << 'PY'
+import cinderx
+import cinderx.jit as jit
+
+assert cinderx.is_initialized()
+jit.enable()
+
+def f(n: int) -> int:
+    s = 0
+    for i in range(n):
+        s += i
+    return s
+
+assert jit.force_compile(f)
+assert jit.is_jit_compiled(f)
+print('Docker ARM64 smoke: ok', jit.get_compiled_size(f))
+PY
+  "
+```
+
+### 8.3 Docker 内运行 benchmark（功能验证）
+
+```bash
+docker run --rm --platform linux/arm64 \
+  -v "$PWD/dist:/dist" \
+  python:3.14-slim bash -c "
+    pip install --quiet /dist/cinderx-*-linux_aarch64.whl
+
+    python3 << 'PY'
+class Tree:
+    def __init__(self, value):
+        self.value = value
+        self.left = None
+        self.right = None
+
+    def __iter__(self):
+        if self.left:
+            yield from self.left
+        yield self.value
+        if self.right:
+            yield from self.right
+
+import time
+import cinderx.jit as jit
+jit.force_compile(Tree.__iter__)
+
+# Warmup
+root = Tree(5)
+root.left = Tree(3)
+root.right = Tree(7)
+for _ in range(3):
+    list(root)
+
+# Measure
+times = []
+for _ in range(5):
+    start = time.perf_counter()
+    list(root)
+    end = time.perf_counter()
+    times.append(end - start)
+
+avg = sum(times) / len(times)
+print(f'Average: {avg:.6f}s')
+PY
+  "
+```
+
+**注意：** Docker ARM64 模拟的性能数据不精确，仅用于功能验证。
