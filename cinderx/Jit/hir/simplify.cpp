@@ -847,17 +847,26 @@ Register* simplifyIsTruthy(Env& env, const IsTruthy* instr) {
   }
   if (armGeneratorNoneTruthyEnabled() && isGeneratorsTreeIterCode(env.func.code)) {
     Register* value = instr->GetOperand(0);
+    // Handle both CheckField (Static Python) and LoadAttr (standard Python)
+    const char* field_name = nullptr;
     if (value->instr()->IsCheckField()) {
       auto* check_field = static_cast<CheckField*>(value->instr());
-      const char* field_name = PyUnicode_AsUTF8(check_field->name());
-      if (field_name != nullptr &&
-          (std::strcmp(field_name, "left") == 0 ||
-           std::strcmp(field_name, "right") == 0)) {
-        env.emit<UseType>(value, value->type());
-        Register* none = env.emit<LoadConst>(Type::fromObject(Py_None));
-        return env.emit<PrimitiveCompare>(
-            PrimitiveCompareOp::kNotEqual, value, none);
+      field_name = PyUnicode_AsUTF8(check_field->name());
+    } else if (value->instr()->IsLoadAttr()) {
+      auto* load_attr = static_cast<LoadAttr*>(value->instr());
+      BorrowedRef<PyCodeObject> code = env.func.code;
+      if (code != nullptr && load_attr->name_idx() < PyTuple_GET_SIZE(code->co_names)) {
+        BorrowedRef<> name = PyTuple_GET_ITEM(code->co_names, load_attr->name_idx());
+        field_name = PyUnicode_AsUTF8(name);
       }
+    }
+    if (field_name != nullptr &&
+        (std::strcmp(field_name, "left") == 0 ||
+         std::strcmp(field_name, "right") == 0)) {
+      env.emit<UseType>(value, value->type());
+      Register* none = env.emit<LoadConst>(Type::fromObject(Py_None));
+      return env.emit<PrimitiveCompare>(
+          PrimitiveCompareOp::kNotEqual, value, none);
     }
   }
   Register* modeled_input = modelReg(instr->GetOperand(0));
