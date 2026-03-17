@@ -103,7 +103,7 @@ def main():
 
     # 测试 3：使用 CinderX JIT（如果可用）
     try:
-        import cinderjit
+        from cinderx import jit as cinderjit
         cinderjit.enable()
 
         print("\n[3] CinderX JIT（递归生成器）")
