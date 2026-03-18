@@ -961,6 +961,7 @@ struct YieldFromProfileDumper {
 // Experimental: Inline yield-from for self.<attr> patterns
 // when enabled via PYTHONJIT_ARM_INLINE_YIELD_FROM
 Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
+  fprintf(stderr, "[SIMPLIFY_DEBUG] ========== simplifyYieldFrom CALLED ==========\n");
   yieldFromStats.total_calls++;
 
   // Always log this for debugging
@@ -999,8 +1000,10 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
 
   // Handle Phi node case - trace through the GetIter->LoadField chain
   if (iter_instr->IsPhi()) {
-    JIT_LOG("simplifyYieldFrom: iter is Phi node");
     auto* phi = static_cast<const Phi*>(iter_instr);
+    fprintf(stderr, "[PHI_DEBUG] iter is Phi node, checking %zu inputs\n",
+            phi->NumOperands());
+    JIT_LOG("simplifyYieldFrom: iter is Phi node");
 
     // Track which inputs lead to self.left/right
     bool found_valid_pattern = false;
@@ -1010,6 +1013,8 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
       Register* phi_input = phi->GetOperand(i);
       Instr* phi_input_instr = phi_input->instr();
 
+      fprintf(stderr, "[PHI_DEBUG] checking Phi input %zu: %s\n",
+              i, phi_input_instr->opname().data());
       JIT_LOG(
           "simplifyYieldFrom: checking Phi input {}", i);
 
@@ -1062,6 +1067,9 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
         auto* load_field = static_cast<const LoadField*>(load_field_source->instr());
         Register* receiver = load_field->receiver();
 
+        fprintf(stderr, "[PHI_DEBUG] Found LoadField, receiver_id=%d, field=%s\n",
+                receiver->id(), load_field->name().c_str());
+
         if (receiver->id() == 0) {  // self
           std::string current_field_name(load_field->name());
           if (current_field_name == "left" || current_field_name == "right") {
@@ -1069,12 +1077,16 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
               // First valid input
               field_name = current_field_name;
               found_valid_pattern = true;
+              fprintf(stderr, "[PHI_DEBUG] ✅ First valid input %zu: field=%s\n",
+                      i, field_name.c_str());
               JIT_LOG(
                   "simplifyYieldFrom: Phi input {} matches pattern! field={}",
                   i,
                   field_name);
             } else if (field_name != current_field_name) {
               // Inconsistent field names across inputs
+              fprintf(stderr, "[PHI_DEBUG] ❌ Inconsistent field names (%s vs %s)\n",
+                      field_name.c_str(), current_field_name.c_str());
               JIT_LOG(
                   "simplifyYieldFrom: inconsistent field names ({} vs {})",
                   field_name,
@@ -1088,6 +1100,7 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
       }
 
       // This input doesn't match the pattern
+      fprintf(stderr, "[PHI_DEBUG] ❌ Input %zu doesn't match pattern\n", i);
       JIT_LOG(
           "simplifyYieldFrom: Phi input {} doesn't match pattern", i);
       found_valid_pattern = false;
@@ -1095,6 +1108,8 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
     }
 
     if (found_valid_pattern) {
+      fprintf(stderr, "[PHI_DEBUG] ✅✅✅ SUCCESS! All Phi inputs match field=%s\n",
+              field_name.c_str());
       JIT_LOG(
           "simplifyYieldFrom: ✅ All Phi inputs match pattern! field={}",
           field_name);
