@@ -2,32 +2,55 @@
 # Full comparison: CPython baseline vs CPython + CinderX (baseline and optimized)
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAMPLES=${SAMPLES:-10}
 WARMUP=${WARMUP:-3}
+BENCHMARK=${BENCHMARK:-generators}
 
 echo "========================================"
 echo "  CinderX Performance Comparison"
 echo "========================================"
 echo "Samples: $SAMPLES"
 echo "Warmup:  $WARMUP"
+echo "Benchmark: $BENCHMARK"
 echo ""
 
 # Prepare benchmark
 echo "=== Preparing benchmark ==="
 mkdir -p /root/benchmarks
-python3 << 'PY'
+python3 << PY
 import urllib.request
 import pathlib
+import sys
 
-url = "https://raw.githubusercontent.com/python/pyperformance/main/pyperformance/data-files/benchmarks/bm_generators/run_benchmark.py"
-output_path = pathlib.Path("/root/benchmarks/run_benchmark.py")
+sys.path.insert(0, "$SCRIPT_DIR")
+from benchmark_harness import benchmark_module_path, resolve_benchmark
+
+spec = resolve_benchmark("$BENCHMARK")
+output_path = benchmark_module_path(pathlib.Path("/root/benchmarks"), "$BENCHMARK")
+output_path.parent.mkdir(parents=True, exist_ok=True)
 
 if not output_path.exists():
+    url = spec.benchmark_url
     print(f"Downloading {url}...")
     urllib.request.urlretrieve(url, output_path)
     print(f"✓ Saved to {output_path}")
 else:
     print(f"✓ Benchmark already exists at {output_path}")
+
+shim_path = output_path.parent / "pyperf.py"
+if not shim_path.exists():
+    shim_path.write_text(
+        "import time\\n"
+        "def perf_counter(): return time.perf_counter()\\n"
+        "class Runner:\\n"
+        "    def __init__(self, *a, **k): pass\\n"
+        "    def bench_time_func(self, *a, **k): pass\\n",
+        encoding="utf-8",
+    )
+    print(f"✓ pyperf shim written to {shim_path}")
+else:
+    print(f"✓ pyperf shim already exists at {shim_path}")
 PY
 
 echo ""
@@ -36,7 +59,7 @@ echo ""
 echo "========================================"
 echo "  Test 1: CPython Baseline"
 echo "========================================"
-/scripts/test-baseline.sh 2>&1 | tee /tmp/baseline.txt
+BENCHMARK="$BENCHMARK" /scripts/test-baseline.sh 2>&1 | tee /tmp/baseline.txt
 
 echo ""
 
@@ -44,7 +67,7 @@ echo ""
 echo "========================================"
 echo "  Test 2: CinderX (no optimization)"
 echo "========================================"
-ENABLE_OPTIMIZATION=0 /scripts/test-cinderx.sh 2>&1 | tee /tmp/cinderx-baseline.txt
+BENCHMARK="$BENCHMARK" ENABLE_OPTIMIZATION=0 /scripts/test-cinderx.sh 2>&1 | tee /tmp/cinderx-baseline.txt
 
 echo ""
 
@@ -52,7 +75,7 @@ echo ""
 echo "========================================"
 echo "  Test 3: CinderX (optimized)"
 echo "========================================"
-ENABLE_OPTIMIZATION=1 /scripts/test-cinderx.sh 2>&1 | tee /tmp/cinderx-optimized.txt
+BENCHMARK="$BENCHMARK" ENABLE_OPTIMIZATION=1 /scripts/test-cinderx.sh 2>&1 | tee /tmp/cinderx-optimized.txt
 
 echo ""
 
@@ -61,14 +84,16 @@ echo "========================================"
 echo "  COMPARISON"
 echo "========================================"
 
+export SAMPLES WARMUP
 python3 << 'PY'
+import os
 import re
 
 def extract_time(filename, pattern="Result"):
     with open(filename) as f:
         content = f.read()
-    # Look for "Result: X.XXXXXXs" or "XXX Result: X.XXXXXXs"
-    match = re.search(rf'(?:\w+\s+)?{pattern}:\s+([\d.]+)s', content)
+    # Accept both "Pattern: X.XXXXXXs" and "Pattern (extra): X.XXXXXXs".
+    match = re.search(rf'{pattern}(?:\s+\([^)]*\))?:\s+([\d.]+)s', content)
     if match:
         return float(match.group(1))
     return None
@@ -77,9 +102,12 @@ baseline = extract_time('/tmp/baseline.txt', 'Baseline Result')
 cinderx_baseline = extract_time('/tmp/cinderx-baseline.txt', 'CinderX Result')
 cinderx_optimized = extract_time('/tmp/cinderx-optimized.txt', 'CinderX Result')
 
-print(f"CPython Baseline:        {baseline:.6f}s")
-print(f"CinderX (no opt):        {cinderx_baseline:.6f}s")
-print(f"CinderX (optimized):     {cinderx_optimized:.6f}s")
+if baseline is not None:
+    print(f"CPython Baseline:        {baseline:.6f}s")
+if cinderx_baseline is not None:
+    print(f"CinderX (no opt):        {cinderx_baseline:.6f}s")
+if cinderx_optimized is not None:
+    print(f"CinderX (optimized):     {cinderx_optimized:.6f}s")
 print()
 
 if baseline and cinderx_baseline:
@@ -103,8 +131,8 @@ from datetime import datetime
 
 results = {
     "timestamp": datetime.now().isoformat(),
-    "samples": $SAMPLES,
-    "warmup": $WARMUP,
+    "samples": int(os.environ["SAMPLES"]),
+    "warmup": int(os.environ["WARMUP"]),
     "baseline": baseline,
     "cinderx_baseline": cinderx_baseline,
     "cinderx_optimized": cinderx_optimized,

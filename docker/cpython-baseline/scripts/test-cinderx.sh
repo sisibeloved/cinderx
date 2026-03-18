@@ -2,6 +2,7 @@
 # Test CPython + CinderX performance
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAMPLES=${SAMPLES:-10}
 WARMUP=${WARMUP:-3}
 BENCHMARK=${BENCHMARK:-generators}
@@ -13,12 +14,41 @@ echo "Samples: $SAMPLES, Warmup: $WARMUP"
 echo "Enable optimization: $ENABLE_OPTIMIZATION"
 echo ""
 
+export SCRIPT_DIR
+eval "$(python3 <<'PY'
+import glob
+import os
+import sys
+
+sys.path.insert(0, os.environ["SCRIPT_DIR"])
+from benchmark_harness import cinderx_wheel_glob
+
+matches = sorted(glob.glob(str(cinderx_wheel_glob())))
+if not matches:
+    raise SystemExit("no CinderX wheel found under /dist")
+print(f'CINDERX_WHEEL="{matches[-1]}"')
+PY
+)"
+
+python3 - <<PY
+import importlib.util
+import subprocess
+import sys
+
+if importlib.util.find_spec("cinderx") is None:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "$CINDERX_WHEEL"])
+PY
+
 # Run benchmark with CinderX enabled
+export SAMPLES WARMUP
 python3 << PY
+import os
 import sys
 import time
 import statistics
-import os
+
+samples = int(os.environ["SAMPLES"])
+warmup = int(os.environ["WARMUP"])
 
 # Import and enable CinderX
 import cinderx
@@ -33,21 +63,24 @@ if $ENABLE_OPTIMIZATION:
     os.environ["PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY"] = "1"
     print("Optimization enabled: PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY=1")
 
-# Add benchmark path
-sys.path.insert(0, "/root/benchmarks")
-from run_benchmark import bench_generators
+sys.path.insert(0, "$SCRIPT_DIR")
+from benchmark_harness import load_benchmark, resolve_benchmark
+
+spec = resolve_benchmark("$BENCHMARK")
+module, bench = load_benchmark("/root/benchmarks", "$BENCHMARK")
+bench_args = spec.bench_args
 
 # Warmup
-print(f"\nWarming up ({WARMUP} runs)...")
-for _ in range($WARMUP):
-    bench_generators(1)
+print(f"\nWarming up ({warmup} runs)...")
+for _ in range(warmup):
+    bench(*bench_args)
 
 # Measure
-print(f"\nMeasuring ({SAMPLES} runs)...")
+print(f"\nMeasuring ({samples} runs)...")
 times = []
-for i in range($SAMPLES):
+for i in range(samples):
     start = time.perf_counter()
-    bench_generators(1)
+    bench(*bench_args)
     end = time.perf_counter()
     elapsed = end - start
     times.append(elapsed)
