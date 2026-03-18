@@ -2,6 +2,31 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 语言偏好 / Language Preference
+
+**重要**: 本项目使用中文进行所有交流和文档编写。
+
+- 所有对话、注释、文档、提交信息统一使用中文
+- 代码中的注释使用中文
+- 技术文档和报告使用中文编写
+- Git提交信息使用中文
+
+**Note**: Code variable names, function names, and technical terms remain in English as per standard programming conventions.
+
+## MCP工具使用 / MCP Tool Usage
+
+**MCP工具策略**: 优先使用claude-mem记忆工具，其他MCP工具暂时禁用。
+
+- ✅ **claude-mem**: 用于访问持久化记忆和跨会话上下文
+- ❌ **其他MCP工具**: 暂时不使用，除非：
+  - 遇到无法通过本地资源解决的技术问题
+  - 用户明确要求使用特定MCP工具
+
+**使用claude-mem的场景**:
+- 访问之前的对话和决策历史
+- 查找相关技术问题的解决方案
+- 回顾项目上下文和背景信息
+
 ## Project Overview
 
 CinderX is a Python extension that improves the performance of the Python runtime through:

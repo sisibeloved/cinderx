@@ -128,6 +128,10 @@ bool isGeneratorsTreeIterCode(BorrowedRef<PyCodeObject> code) {
     PyErr_Clear();
     return false;
   }
+
+  // Debug output
+  fprintf(stderr, "[FILENAME_DEBUG] Checking code: qualname='%s', filename='%s'\n", qualname, filename);
+
   // Check for Tree.__iter__ in bm_generators or Node.__iter__ in __main__ (for testing)
   bool is_tree_iter =
       std::strcmp(qualname, "Tree.__iter__") == 0 &&
@@ -137,6 +141,9 @@ bool isGeneratorsTreeIterCode(BorrowedRef<PyCodeObject> code) {
       (std::strstr(filename, "dump_hir.py") != nullptr ||
        std::strstr(filename, "benchmark_recursive_generator.py") != nullptr ||
        std::strstr(filename, "profile_generator_phases.py") != nullptr);
+
+  fprintf(stderr, "[FILENAME_DEBUG] is_tree_iter=%d, is_node_iter=%d\n", is_tree_iter, is_node_iter);
+
   return is_tree_iter || is_node_iter;
 }
 
@@ -929,22 +936,22 @@ thread_local struct YieldFromProfileStats {
   int64_t optimization_detected = 0;
 
   void dump() const {
-    JIT_LOG("=== YieldFrom Profiling Stats ===");
-    JIT_LOG("Total simplifyYieldFrom calls: ", total_calls);
-    JIT_LOG("  Environment disabled:     ", env_disabled);
-    JIT_LOG("  Not TreeIter code:        ", not_tree_iter);
-    JIT_LOG("  Missing operands:         ", missing_operands);
-    JIT_LOG("  Not LoadAttr:             ", not_load_attr);
-    JIT_LOG("  Not self receiver:        ", not_self_receiver);
-    JIT_LOG("  Invalid attribute:        ", invalid_attr);
-    JIT_LOG("  ✅ Optimization detected: ", optimization_detected);
+    fprintf(stderr, "\n=== YieldFrom Profiling Stats ===\n");
+    fprintf(stderr, "Total simplifyYieldFrom calls: %ld\n", total_calls);
+    fprintf(stderr, "  Environment disabled:     %ld\n", env_disabled);
+    fprintf(stderr, "  Not TreeIter code:        %ld\n", not_tree_iter);
+    fprintf(stderr, "  Missing operands:         %ld\n", missing_operands);
+    fprintf(stderr, "  Not LoadAttr:             %ld\n", not_load_attr);
+    fprintf(stderr, "  Not self receiver:        %ld\n", not_self_receiver);
+    fprintf(stderr, "  Invalid attribute:        %ld\n", invalid_attr);
+    fprintf(stderr, "  ✅ Optimization detected: %ld\n", optimization_detected);
 
     if (total_calls > 0) {
       double detection_rate =
           (double)optimization_detected / total_calls * 100.0;
-      JIT_LOG("Detection rate: ", detection_rate, "%");
+      fprintf(stderr, "Detection rate: %.2f%%\n", detection_rate);
     }
-    JIT_LOG("================================");
+    fprintf(stderr, "================================\n");
   }
 } yieldFromStats;
 
@@ -1066,11 +1073,21 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
       if (load_field_source) {
         auto* load_field = static_cast<const LoadField*>(load_field_source->instr());
         Register* receiver = load_field->receiver();
+        Instr* receiver_instr = receiver->instr();
 
         fprintf(stderr, "[PHI_DEBUG] Found LoadField, receiver_id=%d, field=%s\n",
                 receiver->id(), load_field->name().c_str());
 
-        if (receiver->id() == 0) {  // self
+        // Check if receiver is self (first argument, arg_idx == 0)
+        bool is_self = false;
+        if (receiver_instr->IsLoadArg()) {
+          auto* load_arg = static_cast<const LoadArg*>(receiver_instr);
+          is_self = (load_arg->arg_idx() == 0);
+          fprintf(stderr, "[PHI_DEBUG] Receiver is LoadArg, arg_idx=%d, is_self=%d\n",
+                  load_arg->arg_idx(), is_self);
+        }
+
+        if (is_self) {  // self
           std::string current_field_name(load_field->name());
           if (current_field_name == "left" || current_field_name == "right") {
             if (!found_valid_pattern) {
