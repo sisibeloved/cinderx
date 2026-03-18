@@ -131,6 +131,18 @@ def choose_candidates(functions, strategy: str, explicit_names: set[str]):
     raise ValueError(f"unsupported strategy: {strategy}")
 
 
+def collect_hir_opcode_counts(jit, functions):
+    results = {}
+    for fn in functions:
+        try:
+            ops = jit.get_function_hir_opcode_counts(fn)
+        except Exception:
+            continue
+        if ops is not None:
+            results[fn.__qualname__] = ops
+    return results
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--module-path", required=True)
@@ -188,6 +200,9 @@ def main() -> int:
         if ok:
             compiled.append(fn.__qualname__)
 
+    compiled_functions = [fn for fn in candidates if fn.__qualname__ in compiled]
+    compiled_hir_opcode_counts = collect_hir_opcode_counts(jit, compiled_functions)
+
     samples = []
     all_deopts = []
     for _ in range(args.samples):
@@ -210,6 +225,7 @@ def main() -> int:
         "selected_compile_count": len(candidates),
         "compiled_count": len(compiled),
         "compiled_qualnames": compiled,
+        "compiled_hir_opcode_counts": compiled_hir_opcode_counts,
         "samples": samples,
         "median_wall_sec": statistics.median(sample["wall_sec"] for sample in samples),
         "min_wall_sec": min(sample["wall_sec"] for sample in samples),

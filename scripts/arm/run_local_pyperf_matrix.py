@@ -61,6 +61,11 @@ BENCHMARK_SPECS: dict[str, dict[str, str]] = {
         "bench_func": "bench_generators",
         "bench_args_json": "[1]",
     },
+    "mdp": {
+        "module_relpath": "pyperformance/data-files/benchmarks/bm_mdp/run_benchmark.py",
+        "bench_func": "bench_mdp",
+        "bench_args_json": "[1]",
+    },
 }
 
 

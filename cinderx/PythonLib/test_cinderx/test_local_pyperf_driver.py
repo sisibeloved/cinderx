@@ -31,6 +31,16 @@ def _load_direct_runner():
     return module
 
 
+def _load_probe():
+    path = _repo_root() / "scripts" / "arm" / "probe_jit_apis.py"
+    spec = importlib.util.spec_from_file_location("probe_jit_apis", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"failed to load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 class LocalPyperfDriverTests(unittest.TestCase):
     def test_build_mode_env_baseline_and_arm_coro_fast(self) -> None:
         driver = _load_driver()
@@ -70,6 +80,16 @@ class LocalPyperfDriverTests(unittest.TestCase):
         )
         self.assertEqual(spec["bench_func"], "Richards().run")
 
+    def test_resolve_mdp_benchmark(self) -> None:
+        driver = _load_driver()
+        spec = driver.resolve_benchmark_spec(
+            pathlib.Path("/Users/luchen/Repo/pyperformance"),
+            "mdp",
+        )
+        self.assertEqual(spec["bench_func"], "bench_mdp")
+        self.assertEqual(spec["bench_args_json"], "[1]")
+        self.assertTrue(str(spec["module_path"]).endswith("bm_mdp/run_benchmark.py"))
+
     def test_direct_runner_resolve_attr_path(self) -> None:
         direct_runner = _load_direct_runner()
 
@@ -104,6 +124,58 @@ class LocalPyperfDriverTests(unittest.TestCase):
             module_path.write_text(code, encoding="utf-8")
             module = direct_runner.load_module(module_path, "bench_demo")
             self.assertTrue(hasattr(module, "bench_demo"))
+
+    def test_direct_runner_collects_hir_opcode_counts(self) -> None:
+        direct_runner = _load_direct_runner()
+
+        def alpha():
+            return 1
+
+        def beta():
+            return 2
+
+        class FakeJit:
+            def get_function_hir_opcode_counts(self, fn):
+                if fn is alpha:
+                    return {"LoadConst": 1}
+                if fn is beta:
+                    return {"BinaryOp": 2}
+                return None
+
+        self.assertEqual(
+            direct_runner.collect_hir_opcode_counts(FakeJit(), [alpha, beta]),
+            {
+                alpha.__qualname__: {"LoadConst": 1},
+                beta.__qualname__: {"BinaryOp": 2},
+            },
+        )
+
+    def test_probe_reports_hir_related_api_support(self) -> None:
+        probe = _load_probe()
+
+        class FakeJit:
+            enable = object()
+            print_hir = object()
+            get_function_hir_opcode_counts = object()
+            get_and_clear_runtime_stats = object()
+
+        self.assertEqual(
+            probe.probe_api_support(
+                FakeJit(),
+                (
+                    "enable",
+                    "print_hir",
+                    "get_function_hir_opcode_counts",
+                    "get_and_clear_runtime_stats",
+                ),
+            ),
+            {
+                "enable": True,
+                "print_hir": True,
+                "get_function_hir_opcode_counts": True,
+                "get_and_clear_runtime_stats": True,
+            },
+        )
 
 
 if __name__ == "__main__":

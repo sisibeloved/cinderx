@@ -92,6 +92,10 @@ def _ensure_cinderx_initialized(out: dict[str, Any]) -> None:
         out["cinderx_initialized_after"] = bool(is_initialized_fn())
 
 
+def probe_api_support(module: Any, api_names: tuple[str, ...]) -> dict[str, bool]:
+    return {name: hasattr(module, name) for name in api_names}
+
+
 def _probe_cinderjit() -> dict[str, Any]:
     out: dict[str, Any] = {
         "pre_find_spec_cinderjit": False,
@@ -135,11 +139,13 @@ def _probe_cinderjit() -> dict[str, Any]:
         "is_jit_compiled",
         "get_compiled_size",
         "get_compiled_functions",
+        "get_and_clear_runtime_stats",
+        "get_function_hir_opcode_counts",
+        "print_hir",
         "disassemble",
         "dump_elf",
     )
-    for name in api_names:
-        out["apis"][name] = hasattr(cinderjit, name)
+    out["apis"] = probe_api_support(cinderjit, api_names)
 
     # Prepare runtime
     try:
