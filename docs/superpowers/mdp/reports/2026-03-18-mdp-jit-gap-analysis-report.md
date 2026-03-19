@@ -13,11 +13,12 @@
 - 已新增 `scripts/diagnostics/debug_hir_env.py`，统一生成本地 Debug venv 和 `mdp` HIR 抓取命令
 - 已完成第一轮本地近似基线与热点白名单归因
 - 已完成 ARM Docker 第一轮正式对照，并验证 `stock CPython 3.14.0 @ ebf955df7a8 + JIT` 构建链路
+- 两轮真实优化结果已拆分到独立的 `mdp` 优化报告
 
 当前尚未完成：
 
-- 优化前后 HIR 文本片段对比
-- 第一轮优化实现与正式复核
+- ARM Docker 上的正式复核
+- 第三轮热点 `Battle.getSuccessors` 的优化验证
 
 ## 2. 环境与口径
 
@@ -363,7 +364,14 @@ fun bm_mdp:getCritDist {
 - 这与 opcode 统计中的 `VectorCall`、`GuardType`、`StoreSubscr` 组合高度一致
 - 候选优化方向是压低 `Fraction` 相关路径的 guard/call 成本，或者减少分布构造路径中的对象级回退
 
-## 9. 当前优先级排序
+## 9. 优化迭代报告
+
+本报告只保留 `mdp` 的基线归因、热点分组与优先级结论。两轮真实优化结果已拆分到单独报告：
+
+- [第一轮：applyHPChange 整数 clamp 路径](/Users/luchen/Agents-Repo/Codex/cinderx/docs/superpowers/mdp/reports/2026-03-19-mdp-applyhpchange-optimization-report.md)
+- [第二轮：getCritDist 的 Fraction min 路径](/Users/luchen/Agents-Repo/Codex/cinderx/docs/superpowers/mdp/reports/2026-03-19-mdp-getcritdist-optimization-report.md)
+
+## 10. 当前优先级排序
 
 基于现有本地证据，第一轮优先级建议如下：
 
@@ -407,11 +415,11 @@ fun bm_mdp:getCritDist {
 - HIR 里有明显 helper / call 痕迹
 - 但是否是主差距来源仍需结合 ARM 正式结果进一步验证
 
-## 10. 下一步
+## 11. 下一步
 
 下一阶段要完成的事情：
 
-1. 锁定第一个真实优化目标，优先考虑 `applyHPChange` 与 `getCritDist`
-2. 为首轮优化补回归测试，并在报告中加入优化前后 HIR 对比
-3. 复跑 ARM Docker 正式对照，确认是否缩小 `11.52%` 的当前差距
-4. 将 ARM 正式结果与本地 HIR 变化串成同一条证据链，形成最终归因结论
+1. 保留 `applyHPChange` 与 `getCritDist` 这两轮实验开关，并决定是否提升为默认路径
+2. 锁定第三个真实优化目标，优先考虑 `Battle.getSuccessors`
+3. 为 `Battle.getSuccessors` 补优化前后 HIR 对比与回归测试
+4. 复跑 ARM Docker 正式对照，确认前两轮优化是否缩小 `11.52%` 的当前差距

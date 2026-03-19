@@ -22,7 +22,7 @@
   责任：补齐 `mdp` 归因所需的导出能力，例如热点函数筛选、HIR dump/HIR 统计元数据输出、可选的函数白名单编译。
 - Modify: `scripts/arm/probe_jit_apis.py`
   责任：验证当前本地构建是否支持所需 JIT API，例如 HIR dump、runtime stats、函数级 HIR 统计。
-- Create: `docs/superpowers/reports/2026-03-18-mdp-jit-gap-analysis-report.md`
+- Create: `docs/superpowers/mdp/reports/2026-03-18-mdp-jit-gap-analysis-report.md`
   责任：沉淀中文归因报告，按劣化类型分组，包含与 `stock CPython JIT` 的对照和 HIR 前后对比。
 - Modify: `cinderx/PythonLib/test_cinderx/test_arm_runtime.py`
   责任：为最终锁定的首轮优化点补 JIT 回归测试，优先用 HIR opcode 统计或 final HIR 关键片段做断言。
@@ -186,7 +186,7 @@ git commit -m "diag: clarify available local JIT probe APIs"
 - Read: `/Users/luchen/Repo/pyperformance/pyperformance/data-files/benchmarks/bm_mdp/run_benchmark.py`
 - Read: `scripts/arm/run_local_pyperf_matrix.py`
 - Read: `scripts/arm/bench_pyperf_direct.py`
-- Create: `docs/superpowers/reports/2026-03-18-mdp-jit-gap-analysis-report.md`
+- Create: `docs/superpowers/mdp/reports/2026-03-18-mdp-jit-gap-analysis-report.md`
 
 - [ ] **Step 1: 跑一轮 `mdp` 本地近似基线**
 
@@ -241,14 +241,14 @@ Expected: 缩小归因范围，确认首批代表热点
 - [ ] **Step 5: 提交这一小步**
 
 ```bash
-git add docs/superpowers/reports/2026-03-18-mdp-jit-gap-analysis-report.md
+git add docs/superpowers/mdp/reports/2026-03-18-mdp-jit-gap-analysis-report.md
 git commit -m "docs: add initial mdp local attribution report"
 ```
 
 ### Task 5: 固定 `stock CPython JIT` 与当前 `CinderX JIT` 的正式对照
 
 **Files:**
-- Modify: `docs/superpowers/reports/2026-03-18-mdp-jit-gap-analysis-report.md`
+- Modify: `docs/superpowers/mdp/reports/2026-03-18-mdp-jit-gap-analysis-report.md`
 
 - [ ] **Step 1: 在 ARM Docker 中跑 `stock CPython 3.14.0 + JIT`**
 
@@ -278,14 +278,14 @@ Expected: 确认本地归因没有明显跑偏；若不一致，在报告中单�
 - [ ] **Step 5: 提交这一小步**
 
 ```bash
-git add docs/superpowers/reports/2026-03-18-mdp-jit-gap-analysis-report.md
+git add docs/superpowers/mdp/reports/2026-03-18-mdp-jit-gap-analysis-report.md
 git commit -m "docs: add arm baseline comparison for mdp"
 ```
 
 ### Task 6: 为每类问题补齐 HIR 主证据
 
 **Files:**
-- Modify: `docs/superpowers/reports/2026-03-18-mdp-jit-gap-analysis-report.md`
+- Modify: `docs/superpowers/mdp/reports/2026-03-18-mdp-jit-gap-analysis-report.md`
 
 - [ ] **Step 1: 为每类问题挑 1 到 3 个代表函数**
 
@@ -323,7 +323,7 @@ Expected: 获得可粘贴到报告的精简 HIR 片段
 - [ ] **Step 5: 提交这一小步**
 
 ```bash
-git add docs/superpowers/reports/2026-03-18-mdp-jit-gap-analysis-report.md
+git add docs/superpowers/mdp/reports/2026-03-18-mdp-jit-gap-analysis-report.md
 git commit -m "docs: add hir evidence and priority ranking for mdp"
 ```
 
@@ -332,7 +332,7 @@ git commit -m "docs: add hir evidence and priority ranking for mdp"
 ### Task 7: 锁定第一轮优化目标与文件簇
 
 **Files:**
-- Read: `docs/superpowers/reports/2026-03-18-mdp-jit-gap-analysis-report.md`
+- Read: `docs/superpowers/mdp/reports/2026-03-18-mdp-jit-gap-analysis-report.md`
 - Candidate Modify: `cinderx/Jit/hir/builder.cpp`
 - Candidate Modify: `cinderx/Jit/hir/simplify.cpp`
 - Candidate Modify: `cinderx/Jit/lir/generator.cpp`
@@ -425,7 +425,7 @@ git commit -m "jit: optimize primary mdp regression path"
 ### Task 9: ARM Docker 正式复核与报告收尾
 
 **Files:**
-- Modify: `docs/superpowers/reports/2026-03-18-mdp-jit-gap-analysis-report.md`
+- Modify: `docs/superpowers/mdp/reports/2026-03-18-mdp-jit-gap-analysis-report.md`
 
 - [ ] **Step 1: 在 ARM Docker 中复跑优化后的 `CinderX JIT`**
 
@@ -462,6 +462,6 @@ Expected: 获得正式 `mdp` 结果
 - [ ] **Step 5: 提交报告**
 
 ```bash
-git add docs/superpowers/reports/2026-03-18-mdp-jit-gap-analysis-report.md
+git add docs/superpowers/mdp/reports/2026-03-18-mdp-jit-gap-analysis-report.md
 git commit -m "docs: finalize mdp jit gap analysis report"
 ```
