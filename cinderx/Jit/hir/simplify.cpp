@@ -95,17 +95,17 @@ bool armComprehensionsListSortHelperEnabled() {
 
 bool armMdpIntClampMinMaxEnabled() {
   const char* env = std::getenv("PYTHONJIT_ARM_MDP_INT_CLAMP_MIN_MAX");
-  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
+  return env == nullptr || (env[0] != '\0' && std::strcmp(env, "0") != 0);
 }
 
 bool armMdpFractionMinCompareEnabled() {
   const char* env = std::getenv("PYTHONJIT_ARM_MDP_FRACTION_MIN_COMPARE");
-  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
+  return env == nullptr || (env[0] != '\0' && std::strcmp(env, "0") != 0);
 }
 
 bool armMdpPriorityCompareAddEnabled() {
   const char* env = std::getenv("PYTHONJIT_ARM_MDP_PRIORITY_COMPARE_ADD");
-  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
+  return env == nullptr || (env[0] != '\0' && std::strcmp(env, "0") != 0);
 }
 
 bool armGeneratorNoneTruthyEnabled() {
