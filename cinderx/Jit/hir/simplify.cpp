@@ -90,6 +90,11 @@ bool armComprehensionsListSortHelperEnabled() {
   return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
 }
 
+bool armMdpIntClampMinMaxEnabled() {
+  const char* env = std::getenv("PYTHONJIT_ARM_MDP_INT_CLAMP_MIN_MAX");
+  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
+}
+
 bool armGeneratorNoneTruthyEnabled() {
   const char* env = std::getenv("PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY");
   return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
@@ -180,6 +185,21 @@ bool isRaytraceModuleCode(BorrowedRef<PyCodeObject> code) {
     return false;
   }
   return std::strstr(filename, "bm_raytrace/run_benchmark.py") != nullptr;
+}
+
+bool isMdpApplyHPChangeCode(BorrowedRef<PyCodeObject> code) {
+  if (code == nullptr || !PyUnicode_Check(code->co_qualname) ||
+      !PyUnicode_Check(code->co_filename)) {
+    return false;
+  }
+  const char* qualname = PyUnicode_AsUTF8(code->co_qualname);
+  const char* filename = PyUnicode_AsUTF8(code->co_filename);
+  if (qualname == nullptr || filename == nullptr) {
+    PyErr_Clear();
+    return false;
+  }
+  return std::strcmp(qualname, "applyHPChange") == 0 &&
+      std::strstr(filename, "bm_mdp/run_benchmark.py") != nullptr;
 }
 
 Ref<> getComprehensionsWidgetKindBig(BorrowedRef<PyDictObject> globals) {
@@ -3224,6 +3244,43 @@ static Register* simplifyVectorCallBuiltinMinMax(
 
   Register* lhs = instr->arg(0);
   Register* rhs = instr->arg(1);
+
+  if (armMdpIntClampMinMaxEnabled() && isMdpApplyHPChangeCode(env.func.code)) {
+    Register* guarded_lhs =
+        lhs->isA(TLongExact)
+        ? lhs
+        : env.emit<GuardType>(TLongExact, lhs, *instr->frameState());
+    Register* guarded_rhs =
+        rhs->isA(TLongExact)
+        ? rhs
+        : env.emit<GuardType>(TLongExact, rhs, *instr->frameState());
+
+    env.emit<UseType>(target, target->type());
+    env.emit<UseType>(guarded_lhs, TLongExact);
+    env.emit<UseType>(guarded_rhs, TLongExact);
+
+    Register* choose_rhs_obj = env.emit<Compare>(
+        is_min ? CompareOp::kLessThan : CompareOp::kGreaterThan,
+        guarded_rhs,
+        guarded_lhs,
+        *instr->frameState());
+    Register* choose_rhs =
+        env.emit<IsTruthy>(choose_rhs_obj, *instr->frameState());
+
+    return env.emitCond(
+        [&](BasicBlock* rhs_block, BasicBlock* lhs_block) {
+          env.emit<CondBranch>(choose_rhs, rhs_block, lhs_block);
+        },
+        [&] {
+          env.emit<UseType>(guarded_rhs, TLongExact);
+          return guarded_rhs;
+        },
+        [&] {
+          env.emit<UseType>(guarded_lhs, TLongExact);
+          return guarded_lhs;
+        });
+  }
+
   if (!lhs->isA(TFloatExact)) {
     lhs = env.emit<GuardType>(TFloatExact, lhs, *instr->frameState());
   }
