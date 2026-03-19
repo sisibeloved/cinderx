@@ -9,7 +9,7 @@
 约束条件如下：
 
 - 只优化 `CinderX JIT`，不修改 `pyperformance` 中的 `bm_mdp`
-- 官方对照固定为 `/Users/luchen/Repo/cpython` 中的 `Python 3.14.0` 提交 `ebf955df7a89ed0c7968f79faec1de49f61ed7cb`
+- 官方对照固定为 `$HOME/Repo/cpython` 中的 `Python 3.14.0` 提交 `ebf955df7a89ed0c7968f79faec1de49f61ed7cb`
 - 基线与最终结果验证统一放在 `ARM Docker` 容器中
 - 调试、局部实验、快速迭代统一在 `macOS 本地编译` 环境中完成
 - 报告与文档统一使用中文

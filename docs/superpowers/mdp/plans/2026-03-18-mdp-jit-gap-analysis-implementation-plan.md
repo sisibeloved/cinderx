@@ -51,7 +51,7 @@
 
 ```python
 spec = driver.resolve_benchmark_spec(
-    pathlib.Path("/Users/luchen/Repo/pyperformance"),
+    pathlib.Path.home() / "Repo" / "pyperformance",
     "mdp",
 )
 assert spec["bench_func"] == "bench_mdp"
@@ -183,7 +183,7 @@ git commit -m "diag: clarify available local JIT probe APIs"
 ### Task 4: 在 macOS 本地采集 `mdp` 归因基线
 
 **Files:**
-- Read: `/Users/luchen/Repo/pyperformance/pyperformance/data-files/benchmarks/bm_mdp/run_benchmark.py`
+- Read: `$HOME/Repo/pyperformance/pyperformance/data-files/benchmarks/bm_mdp/run_benchmark.py`
 - Read: `scripts/arm/run_local_pyperf_matrix.py`
 - Read: `scripts/arm/bench_pyperf_direct.py`
 - Create: `docs/superpowers/mdp/reports/2026-03-18-mdp-jit-gap-analysis-report.md`
@@ -194,7 +194,7 @@ Run:
 
 ```bash
 python3 scripts/arm/run_local_pyperf_matrix.py \
-  --pyperformance-root /Users/luchen/Repo/pyperformance \
+  --pyperformance-root "$HOME/Repo/pyperformance" \
   --benchmark mdp \
   --mode baseline \
   --samples 5 \
@@ -217,7 +217,7 @@ Run:
 
 ```bash
 python3 scripts/arm/bench_pyperf_direct.py \
-  --module-path /Users/luchen/Repo/pyperformance/pyperformance/data-files/benchmarks/bm_mdp/run_benchmark.py \
+  --module-path "$HOME/Repo/pyperformance/pyperformance/data-files/benchmarks/bm_mdp/run_benchmark.py" \
   --bench-func bench_mdp \
   --bench-args-json "[1]" \
   --compile-strategy names \
@@ -406,7 +406,7 @@ Run:
 
 ```bash
 python3 scripts/arm/run_local_pyperf_matrix.py \
-  --pyperformance-root /Users/luchen/Repo/pyperformance \
+  --pyperformance-root "$HOME/Repo/pyperformance" \
   --benchmark mdp \
   --mode baseline \
   --samples 5 \

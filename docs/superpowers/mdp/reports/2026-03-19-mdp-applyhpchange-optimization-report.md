@@ -6,9 +6,9 @@
 
 本轮实现：
 
-- 在 [simplify.cpp](/Users/luchen/Agents-Repo/Codex/cinderx/cinderx/Jit/hir/simplify.cpp) 中新增实验开关 `PYTHONJIT_ARM_MDP_INT_CLAMP_MIN_MAX`
+- 在 `cinderx/Jit/hir/simplify.cpp` 中新增实验开关 `PYTHONJIT_ARM_MDP_INT_CLAMP_MIN_MAX`
 - 仅对 `bm_mdp.applyHPChange` 中的二参 `min/max` 专门化改走整数 clamp 路径
-- 新增回归测试 [test_jit_mdp_experiments.py](/Users/luchen/Agents-Repo/Codex/cinderx/cinderx/PythonLib/test_cinderx/test_jit_mdp_experiments.py)，比较 baseline 与开关开启后的 HIR / deopt 差异
+- 新增回归测试 `cinderx/PythonLib/test_cinderx/test_jit_mdp_experiments.py`，比较 baseline 与开关开启后的 HIR / deopt 差异
 
 ### 1.1 优化前后 HIR 对比
 

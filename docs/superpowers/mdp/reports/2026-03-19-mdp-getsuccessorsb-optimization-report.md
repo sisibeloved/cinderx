@@ -6,9 +6,9 @@
 
 本轮实现：
 
-- 在 [simplify.cpp](/Users/luchen/Agents-Repo/Codex/cinderx/cinderx/Jit/hir/simplify.cpp) 中新增实验开关 `PYTHONJIT_ARM_MDP_PRIORITY_COMPARE_ADD`
+- 在 `cinderx/Jit/hir/simplify.cpp` 中新增实验开关 `PYTHONJIT_ARM_MDP_PRIORITY_COMPARE_ADD`
 - 仅对 `bm_mdp.Battle._getSuccessorsB` 中 `10000 * (action == "...")` 这类 priority bonus 路径做专门化
-- 新增回归测试 [test_jit_mdp_get_successors_b_experiments.py](/Users/luchen/Agents-Repo/Codex/cinderx/cinderx/PythonLib/test_cinderx/test_jit_mdp_get_successors_b_experiments.py)
+- 新增回归测试 `cinderx/PythonLib/test_cinderx/test_jit_mdp_get_successors_b_experiments.py`
 
 ### 1.1 优化前后 HIR 对比
 
@@ -87,7 +87,7 @@ fun bm_mdp:Battle._getSuccessorsB {
 
 修复后已确认：
 
-- [test_jit_mdp_get_successors_b_experiments.py](/Users/luchen/Agents-Repo/Codex/cinderx/cinderx/PythonLib/test_cinderx/test_jit_mdp_get_successors_b_experiments.py) 通过
+- `cinderx/PythonLib/test_cinderx/test_jit_mdp_get_successors_b_experiments.py` 通过
 - 三轮实验开关同时开启时，`bench_mdp` 单样本集成验证不再报 `invalid result`
 
 ### 1.4 当前判断

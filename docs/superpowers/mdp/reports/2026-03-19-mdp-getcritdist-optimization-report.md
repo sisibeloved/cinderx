@@ -6,9 +6,9 @@
 
 本轮实现：
 
-- 在 [simplify.cpp](/Users/luchen/Agents-Repo/Codex/cinderx/cinderx/Jit/hir/simplify.cpp) 中新增实验开关 `PYTHONJIT_ARM_MDP_FRACTION_MIN_COMPARE`
+- 在 `cinderx/Jit/hir/simplify.cpp` 中新增实验开关 `PYTHONJIT_ARM_MDP_FRACTION_MIN_COMPARE`
 - 仅对 `bm_mdp.getCritDist` 中的 `min(p, Fraction(1))` 走 compare-select 路径，避免错误落入 float `min` 专门化
-- 回归测试继续放在 [test_jit_mdp_experiments.py](/Users/luchen/Agents-Repo/Codex/cinderx/cinderx/PythonLib/test_cinderx/test_jit_mdp_experiments.py)
+- 回归测试继续放在 `cinderx/PythonLib/test_cinderx/test_jit_mdp_experiments.py`
 
 ### 1.1 优化前后 HIR 对比
 

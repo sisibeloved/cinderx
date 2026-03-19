@@ -44,13 +44,13 @@
 
 - `stock CPython 3.14.0 + JIT`
 - 基线提交：`ebf955df7a89ed0c7968f79faec1de49f61ed7cb`
-- 本地源码：`/Users/luchen/Repo/cpython`
+- 本地源码：`$HOME/Repo/cpython`
 
 ### 2.2 本地近似归因
 
 本地归因使用：
 
-- `pyperformance` 源码：`/Users/luchen/Repo/pyperformance`
+- `pyperformance` 源码：`$HOME/Repo/pyperformance`
 - benchmark 文件：`pyperformance/data-files/benchmarks/bm_mdp/run_benchmark.py`
 - 本地入口：`scripts/arm/run_local_pyperf_matrix.py`
 - 直接运行器：`scripts/arm/bench_pyperf_direct.py`
@@ -64,7 +64,7 @@
 
 ### 3.1 基线解释器验证
 
-容器内已从 `/Users/luchen/Repo/cpython` 构建出独立的 stock CPython JIT 解释器：
+容器内已从 `$HOME/Repo/cpython` 构建出独立的 stock CPython JIT 解释器：
 
 - 版本：`3.14.0 (tags/v3.14.0:ebf955df7a8, ...)`
 - 可执行文件：`/opt/cpython-jit/bin/python3`
@@ -117,7 +117,7 @@ docker exec cpython-baseline-test sh -lc 'BENCHMARK=mdp SAMPLES=5 WARMUP=1 /scri
 
 ```bash
 python3 scripts/arm/run_local_pyperf_matrix.py \
-  --pyperformance-root /Users/luchen/Repo/pyperformance \
+  --pyperformance-root "$HOME/Repo/pyperformance" \
   --benchmark mdp \
   --mode baseline \
   --samples 5 \
@@ -143,7 +143,7 @@ python3 scripts/arm/run_local_pyperf_matrix.py \
 
 ```bash
 python3 scripts/arm/bench_pyperf_direct.py \
-  --module-path /Users/luchen/Repo/pyperformance/pyperformance/data-files/benchmarks/bm_mdp/run_benchmark.py \
+  --module-path "$HOME/Repo/pyperformance/pyperformance/data-files/benchmarks/bm_mdp/run_benchmark.py" \
   --bench-func bench_mdp \
   --bench-args-json "[1]" \
   --compile-strategy names \
@@ -402,9 +402,9 @@ fun bm_mdp:getCritDist {
 
 本报告只保留 `mdp` 的基线归因、热点分组与优先级结论。真实优化结果已拆分到单独报告：
 
-- [第一轮：applyHPChange 整数 clamp 路径](/Users/luchen/Agents-Repo/Codex/cinderx/docs/superpowers/mdp/reports/2026-03-19-mdp-applyhpchange-optimization-report.md)
-- [第二轮：getCritDist 的 Fraction min 路径](/Users/luchen/Agents-Repo/Codex/cinderx/docs/superpowers/mdp/reports/2026-03-19-mdp-getcritdist-optimization-report.md)
-- [第三轮：_getSuccessorsB 的 priority compare-add 路径](/Users/luchen/Agents-Repo/Codex/cinderx/docs/superpowers/mdp/reports/2026-03-19-mdp-getsuccessorsb-optimization-report.md)
+- 第一轮：`docs/superpowers/mdp/reports/2026-03-19-mdp-applyhpchange-optimization-report.md`
+- 第二轮：`docs/superpowers/mdp/reports/2026-03-19-mdp-getcritdist-optimization-report.md`
+- 第三轮：`docs/superpowers/mdp/reports/2026-03-19-mdp-getsuccessorsb-optimization-report.md`
 - 第四轮 `Battle.getSuccessors` whole-helper 路径已降级为负优化实验，结论保留在本报告中，不再作为主线独立收益报告维护
 
 ## 10. 当前优先级排序
