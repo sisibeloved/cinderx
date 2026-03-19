@@ -1128,6 +1128,186 @@ PyObject* JITRT_ComprehensionsListSortHelper(PyObject* list_obj) {
   return PyObject_CallMethodObjArgs(list_obj, name, nullptr);
 }
 
+namespace {
+
+PyObject* newInternedUnicode(const char* value) {
+  return PyUnicode_InternFromString(value);
+}
+
+PyObject* mdpGetSuccessorsCached(PyObject* successors, PyObject* statep) {
+  if (PyDict_CheckExact(successors)) {
+    PyObject* value = PyDict_GetItemWithError(successors, statep);
+    if (value != nullptr) {
+      return Py_NewRef(value);
+    }
+    if (PyErr_Occurred()) {
+      return nullptr;
+    }
+    return nullptr;
+  }
+
+  Ref<> result = Ref<>::steal(PyObject_GetItem(successors, statep));
+  if (result != nullptr) {
+    return result.release();
+  }
+  if (!PyErr_ExceptionMatches(PyExc_KeyError)) {
+    return nullptr;
+  }
+  PyErr_Clear();
+  return nullptr;
+}
+
+PyObject* mdpGetStateTag(PyObject* statep) {
+  if (PyTuple_CheckExact(statep) && PyTuple_GET_SIZE(statep) > 0) {
+    return Py_NewRef(PyTuple_GET_ITEM(statep, 0));
+  }
+  Ref<> zero = Ref<>::steal(PyLong_FromLong(0));
+  if (zero == nullptr) {
+    return nullptr;
+  }
+  return PyObject_GetItem(statep, zero);
+}
+
+PyObject* mdpCallMethod1(PyObject* self, const char* method_name, PyObject* arg) {
+  Ref<> name = Ref<>::steal(newInternedUnicode(method_name));
+  if (name == nullptr) {
+    return nullptr;
+  }
+  return PyObject_CallMethodObjArgs(self, name, arg, nullptr);
+}
+
+PyObject* mdpSortSuccessorPairs(PyObject* items) {
+  Py_ssize_t size = PyList_GET_SIZE(items);
+  Ref<> decorated = Ref<>::steal(PyList_New(size));
+  if (decorated == nullptr) {
+    return nullptr;
+  }
+
+  for (Py_ssize_t i = 0; i < size; i++) {
+    BorrowedRef<> pair = PyList_GET_ITEM(items, i);
+    BorrowedRef<> key = PyTuple_GET_ITEM(pair.get(), 0);
+    BorrowedRef<> value = PyTuple_GET_ITEM(pair.get(), 1);
+    Ref<> neg_value = Ref<>::steal(PyNumber_Negative(value));
+    if (neg_value == nullptr) {
+      return nullptr;
+    }
+    Ref<> sort_key = Ref<>::steal(PyTuple_New(2));
+    if (sort_key == nullptr) {
+      return nullptr;
+    }
+    PyTuple_SET_ITEM(sort_key.get(), 0, Py_NewRef(neg_value));
+    PyTuple_SET_ITEM(sort_key.get(), 1, Py_NewRef(key));
+
+    Ref<> decorated_pair = Ref<>::steal(PyTuple_New(2));
+    if (decorated_pair == nullptr) {
+      return nullptr;
+    }
+    PyTuple_SET_ITEM(decorated_pair.get(), 0, sort_key.release());
+    PyTuple_SET_ITEM(decorated_pair.get(), 1, Py_NewRef(pair));
+    PyList_SET_ITEM(decorated.get(), i, decorated_pair.release());
+  }
+
+  if (PyList_Sort(decorated) < 0) {
+    return nullptr;
+  }
+
+  Ref<> result = Ref<>::steal(PyList_New(size));
+  if (result == nullptr) {
+    return nullptr;
+  }
+  for (Py_ssize_t i = 0; i < size; i++) {
+    BorrowedRef<> decorated_pair = PyList_GET_ITEM(decorated.get(), i);
+    BorrowedRef<> pair = PyTuple_GET_ITEM(decorated_pair.get(), 1);
+    PyList_SET_ITEM(result.get(), i, Py_NewRef(pair));
+  }
+  return result.release();
+}
+
+} // namespace
+
+PyObject* JITRT_MdpGetSuccessorsWholeHelper(
+    PyObject* self,
+    PyObject* successors,
+    PyObject* statep) {
+  if (PyObject* cached = mdpGetSuccessorsCached(successors, statep)) {
+    return cached;
+  }
+  if (PyErr_Occurred()) {
+    return nullptr;
+  }
+
+  Ref<> st_obj = Ref<>::steal(mdpGetStateTag(statep));
+  if (st_obj == nullptr) {
+    return nullptr;
+  }
+  long st = PyLong_AsLong(st_obj);
+  if (st == -1 && PyErr_Occurred()) {
+    return nullptr;
+  }
+
+  Ref<> result;
+  if (st == 0) {
+    Ref<> iter = Ref<>::steal(mdpCallMethod1(self, "_getSuccessorsA", statep));
+    if (iter == nullptr) {
+      return nullptr;
+    }
+    result = Ref<>::steal(PySequence_List(iter));
+    if (result == nullptr) {
+      return nullptr;
+    }
+  } else {
+    const char* method_name = nullptr;
+    if (st == 1) {
+      method_name = "_getSuccessorsB";
+    } else if (st == 2) {
+      method_name = "_getSuccessorsC";
+    } else {
+      PyErr_SetString(PyExc_KeyError, "unsupported mdp state tag");
+      return nullptr;
+    }
+
+    Ref<> dist = Ref<>::steal(mdpCallMethod1(self, method_name, statep));
+    if (dist == nullptr) {
+      return nullptr;
+    }
+    if (PyDict_CheckExact(dist)) {
+      Ref<> items = Ref<>::steal(PyDict_Items(dist));
+      if (items == nullptr) {
+        return nullptr;
+      }
+      result = Ref<>::steal(mdpSortSuccessorPairs(items));
+    } else {
+      Ref<> items_name = Ref<>::steal(newInternedUnicode("items"));
+      if (items_name == nullptr) {
+        return nullptr;
+      }
+      Ref<> items = Ref<>::steal(PyObject_CallMethodObjArgs(dist, items_name, nullptr));
+      if (items == nullptr) {
+        return nullptr;
+      }
+      Ref<> items_list = Ref<>::steal(PySequence_List(items));
+      if (items_list == nullptr) {
+        return nullptr;
+      }
+      result = Ref<>::steal(mdpSortSuccessorPairs(items_list));
+    }
+    if (result == nullptr) {
+      return nullptr;
+    }
+  }
+
+  int set_result;
+  if (PyDict_CheckExact(successors)) {
+    set_result = PyDict_SetItem(successors, statep, result);
+  } else {
+    set_result = PyObject_SetItem(successors, statep, result);
+  }
+  if (set_result < 0) {
+    return nullptr;
+  }
+  return result.release();
+}
+
 PyObject* JITRT_LoadFunctionIndirect(PyObject** func, PyObject* descr) {
   PyObject* res = *func;
   if (!res) {

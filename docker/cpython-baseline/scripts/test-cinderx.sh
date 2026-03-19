@@ -30,6 +30,23 @@ print(f'CINDERX_WHEEL="{matches[-1]}"')
 PY
 )"
 
+export BENCHMARK ENABLE_OPTIMIZATION
+eval "$(python3 <<'PY'
+import os
+import sys
+
+sys.path.insert(0, os.environ["SCRIPT_DIR"])
+from benchmark_harness import cinderx_runtime_env
+
+env = cinderx_runtime_env(
+    os.environ["BENCHMARK"],
+    enable_optimization=os.environ["ENABLE_OPTIMIZATION"] not in ("", "0"),
+)
+for key, value in env.items():
+    print(f'export {key}="{value}"')
+PY
+)"
+
 python3 - <<PY
 import importlib.util
 import subprocess
@@ -58,10 +75,14 @@ jit.enable()
 print(f"CinderX version: {cinderx.__version__ if hasattr(cinderx, '__version__') else 'unknown'}")
 print(f"JIT enabled: {jit.is_enabled()}")
 
-# Set optimization flag
-if $ENABLE_OPTIMIZATION:
-    os.environ["PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY"] = "1"
-    print("Optimization enabled: PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY=1")
+opt_env = {
+    key: value
+    for key, value in os.environ.items()
+    if key.startswith("PYTHONJIT_ARM_")
+}
+if opt_env:
+    for key in sorted(opt_env):
+        print(f"Optimization enabled: {key}={opt_env[key]}")
 
 sys.path.insert(0, "$SCRIPT_DIR")
 from benchmark_harness import load_benchmark, resolve_benchmark

@@ -116,6 +116,29 @@ class BenchmarkHarnessTests(unittest.TestCase):
             pathlib.Path("/dist/cinderx-*-linux_aarch64.whl"),
         )
 
+    def test_cinderx_runtime_env_uses_generator_flag_for_generators(self) -> None:
+        harness = _load_harness()
+        self.assertEqual(
+            harness.cinderx_runtime_env("generators", enable_optimization=True),
+            {"PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY": "1"},
+        )
+
+    def test_cinderx_runtime_env_uses_mdp_flags_for_mdp(self) -> None:
+        harness = _load_harness()
+        self.assertEqual(
+            harness.cinderx_runtime_env("mdp", enable_optimization=True),
+            {
+                "PYTHONJIT_ARM_MDP_INT_CLAMP_MIN_MAX": "1",
+                "PYTHONJIT_ARM_MDP_FRACTION_MIN_COMPARE": "1",
+                "PYTHONJIT_ARM_MDP_PRIORITY_COMPARE_ADD": "1",
+                "PYTHONJIT_ARM_MDP_GET_SUCCESSORS_WHOLE_HELPER": "1",
+            },
+        )
+
+    def test_cinderx_runtime_env_is_empty_when_optimization_disabled(self) -> None:
+        harness = _load_harness()
+        self.assertEqual(harness.cinderx_runtime_env("mdp", enable_optimization=False), {})
+
 
 if __name__ == "__main__":
     unittest.main()

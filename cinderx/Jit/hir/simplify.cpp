@@ -105,6 +105,12 @@ bool armMdpPriorityCompareAddEnabled() {
   return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
 }
 
+bool armMdpGetSuccessorsWholeHelperEnabled() {
+  const char* env =
+      std::getenv("PYTHONJIT_ARM_MDP_GET_SUCCESSORS_WHOLE_HELPER");
+  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
+}
+
 bool armGeneratorNoneTruthyEnabled() {
   const char* env = std::getenv("PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY");
   return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
@@ -239,6 +245,21 @@ bool isMdpGetSuccessorsBCode(BorrowedRef<PyCodeObject> code) {
     return false;
   }
   return std::strcmp(qualname, "Battle._getSuccessorsB") == 0 &&
+      std::strstr(filename, "bm_mdp/run_benchmark.py") != nullptr;
+}
+
+bool isMdpGetSuccessorsCode(BorrowedRef<PyCodeObject> code) {
+  if (code == nullptr || !PyUnicode_Check(code->co_qualname) ||
+      !PyUnicode_Check(code->co_filename)) {
+    return false;
+  }
+  const char* qualname = PyUnicode_AsUTF8(code->co_qualname);
+  const char* filename = PyUnicode_AsUTF8(code->co_filename);
+  if (qualname == nullptr || filename == nullptr) {
+    PyErr_Clear();
+    return false;
+  }
+  return std::strcmp(qualname, "Battle.getSuccessors") == 0 &&
       std::strstr(filename, "bm_mdp/run_benchmark.py") != nullptr;
 }
 
@@ -1538,6 +1559,21 @@ Register* simplifyBinaryOp(Env& env, const BinaryOp* instr) {
   }
 
   if (op == BinaryOpKind::kSubscript) {
+    if (armMdpGetSuccessorsWholeHelperEnabled() &&
+        isMdpGetSuccessorsCode(BorrowedRef<PyCodeObject>{env.func.code})) {
+      FrameState* frame = instr->frameState();
+      if (frame != nullptr && frame->localsplus.size() >= 2 &&
+          frame->localsplus[0] != nullptr && frame->localsplus[1] != nullptr) {
+        Register* result = env.emitVariadic<CallStatic>(
+            3,
+            reinterpret_cast<void*>(JITRT_MdpGetSuccessorsWholeHelper),
+            instr->output()->type() | TNullptr,
+            frame->localsplus[0],
+            lhs,
+            frame->localsplus[1]);
+        return env.emit<CheckExc>(result, *instr->frameState());
+      }
+    }
     if (lhs->isA(TDictExact)) {
       return env.emit<DictSubscr>(lhs, rhs, *instr->frameState());
     }

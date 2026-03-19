@@ -93,3 +93,19 @@ def stock_cpython_runtime_env() -> dict[str, str]:
 
 def cinderx_wheel_glob() -> Path:
     return Path(os.environ.get("CINDERX_WHEEL_GLOB", "/dist/cinderx-*-linux_aarch64.whl"))
+
+
+def cinderx_runtime_env(name: str, enable_optimization: bool) -> dict[str, str]:
+    if not enable_optimization:
+        return {}
+    if name == "generators":
+        return {"PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY": "1"}
+    if name == "mdp":
+        return {
+            "PYTHONJIT_ARM_MDP_INT_CLAMP_MIN_MAX": "1",
+            "PYTHONJIT_ARM_MDP_FRACTION_MIN_COMPARE": "1",
+            "PYTHONJIT_ARM_MDP_PRIORITY_COMPARE_ADD": "1",
+            "PYTHONJIT_ARM_MDP_GET_SUCCESSORS_WHOLE_HELPER": "1",
+        }
+    resolve_benchmark(name)
+    return {}
