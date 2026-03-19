@@ -18,7 +18,18 @@
 当前尚未完成：
 
 - ARM Docker 上的正式复核
-- 第三轮热点 `Battle.getSuccessors` 的优化验证
+- 第三轮 `_getSuccessorsB` 的稳定收益复核
+- `Battle.getSuccessors` 的 `BinaryOp / UnhandledException` 路径优化验证
+
+当前第三轮 `_getSuccessorsB` 实验已得到一轮本地近似复核：
+
+- HIR 形状改善：`BinaryOp 6 -> 4`，`GuardType 5 -> 3`
+- 热点白名单本地近似：相对前两轮仅约 `0.25%` 边际改善
+
+结论：
+
+- 这轮更像“结构上更合理，但性能收益暂不明显”的实验
+- 后续优先级仍应回到 `Battle.getSuccessors` 的异常控制流热点
 
 ## 2. 环境与口径
 
@@ -160,6 +171,18 @@ python3 scripts/arm/bench_pyperf_direct.py \
 - `applyHPChange` 是目前最突出的单点异常来源
 - `Battle.getSuccessors` 虽然 HIR 很短，但存在异常路径或缓存访问相关成本
 - `getCritDist` 暗示 `Fraction` / 分布路径仍有明显类型守卫压力
+
+前两轮优化落地后，热点白名单近似跑分的剩余头部 deopt 已收敛为：
+
+| Rank | 函数 | 行号 | 描述 | 原因 | Count |
+|------|------|------|------|------|-------|
+| 1 | `Battle.getSuccessors` | 186 | `BinaryOp` | `UnhandledException` | `14463` |
+
+补充判断：
+
+- 前两轮已经基本消除了 `applyHPChange` 与 `getCritDist` 的高频守卫失败
+- 运行时层面当前最集中的剩余问题已经转向 `Battle.getSuccessors`
+- 第三轮先转向 `_getSuccessorsB`，是因为它更适合做局部 HIR 减重实验，而不是因为它在运行时统计上超过了 `Battle.getSuccessors`
 
 ## 6. 按劣化类型分组的初步结论
 
@@ -370,6 +393,7 @@ fun bm_mdp:getCritDist {
 
 - [第一轮：applyHPChange 整数 clamp 路径](/Users/luchen/Agents-Repo/Codex/cinderx/docs/superpowers/mdp/reports/2026-03-19-mdp-applyhpchange-optimization-report.md)
 - [第二轮：getCritDist 的 Fraction min 路径](/Users/luchen/Agents-Repo/Codex/cinderx/docs/superpowers/mdp/reports/2026-03-19-mdp-getcritdist-optimization-report.md)
+- [第三轮：_getSuccessorsB 的 priority compare-add 路径](/Users/luchen/Agents-Repo/Codex/cinderx/docs/superpowers/mdp/reports/2026-03-19-mdp-getsuccessorsb-optimization-report.md)
 
 ## 10. 当前优先级排序
 
@@ -420,6 +444,6 @@ fun bm_mdp:getCritDist {
 下一阶段要完成的事情：
 
 1. 保留 `applyHPChange` 与 `getCritDist` 这两轮实验开关，并决定是否提升为默认路径
-2. 锁定第三个真实优化目标，优先考虑 `Battle.getSuccessors`
+2. 为第三轮 `_getSuccessorsB` 实验补足多样本本地近似收益验证，并决定是否值得继续推进
 3. 为 `Battle.getSuccessors` 补优化前后 HIR 对比与回归测试
-4. 复跑 ARM Docker 正式对照，确认前两轮优化是否缩小 `11.52%` 的当前差距
+4. 复跑 ARM Docker 正式对照，确认前两轮及后续优化是否缩小 `11.52%` 的当前差距

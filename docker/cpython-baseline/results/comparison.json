@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-03-18T10:11:48.047143",
+  "samples": 5,
+  "warmup": 1,
+  "baseline": 1.128635,
+  "cinderx_baseline": 1.275608,
+  "cinderx_optimized": 1.16488,
+  "speedup_cinderx": 0.8847820019943431,
+  "speedup_cinderx_optimized": 0.9688852070599548
+}

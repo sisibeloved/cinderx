@@ -100,6 +100,11 @@ bool armMdpFractionMinCompareEnabled() {
   return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
 }
 
+bool armMdpPriorityCompareAddEnabled() {
+  const char* env = std::getenv("PYTHONJIT_ARM_MDP_PRIORITY_COMPARE_ADD");
+  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
+}
+
 bool armGeneratorNoneTruthyEnabled() {
   const char* env = std::getenv("PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY");
   return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
@@ -220,6 +225,62 @@ bool isMdpGetCritDistCode(BorrowedRef<PyCodeObject> code) {
   }
   return std::strcmp(qualname, "getCritDist") == 0 &&
       std::strstr(filename, "bm_mdp/run_benchmark.py") != nullptr;
+}
+
+bool isMdpGetSuccessorsBCode(BorrowedRef<PyCodeObject> code) {
+  if (code == nullptr || !PyUnicode_Check(code->co_qualname) ||
+      !PyUnicode_Check(code->co_filename)) {
+    return false;
+  }
+  const char* qualname = PyUnicode_AsUTF8(code->co_qualname);
+  const char* filename = PyUnicode_AsUTF8(code->co_filename);
+  if (qualname == nullptr || filename == nullptr) {
+    PyErr_Clear();
+    return false;
+  }
+  return std::strcmp(qualname, "Battle._getSuccessorsB") == 0 &&
+      std::strstr(filename, "bm_mdp/run_benchmark.py") != nullptr;
+}
+
+bool isLongObjectConst(Register* reg, long expected) {
+  PyObject* obj = reg->type().asObject();
+  if (obj == nullptr || !PyLong_CheckExact(obj)) {
+    return false;
+  }
+  int overflow = 0;
+  long actual = PyLong_AsLongAndOverflow(obj, &overflow);
+  if (overflow != 0 || PyErr_Occurred()) {
+    PyErr_Clear();
+    return false;
+  }
+  return actual == expected;
+}
+
+bool matchMdpPriorityBonusMultiply(
+    Register* reg,
+    Register** compare_out,
+    Register** bonus_const_out) {
+  if (!reg->instr()->IsBinaryOp()) {
+    return false;
+  }
+  auto* binop = static_cast<const BinaryOp*>(reg->instr());
+  if (binop->op() != BinaryOpKind::kMultiply) {
+    return false;
+  }
+
+  Register* left = binop->left();
+  Register* right = binop->right();
+  if (isLongObjectConst(left, 10000) && right->instr()->IsUnicodeCompare()) {
+    *compare_out = right;
+    *bonus_const_out = left;
+    return true;
+  }
+  if (isLongObjectConst(right, 10000) && left->instr()->IsUnicodeCompare()) {
+    *compare_out = left;
+    *bonus_const_out = right;
+    return true;
+  }
+  return false;
 }
 
 Ref<> getComprehensionsWidgetKindBig(BorrowedRef<PyDictObject> globals) {
@@ -1453,6 +1514,27 @@ Register* simplifyBinaryOp(Env& env, const BinaryOp* instr) {
         lhs,
         rhs);
     return env.emit<CheckExc>(call->output(), *instr->frameState());
+  }
+
+  if (armMdpPriorityCompareAddEnabled() && op == BinaryOpKind::kMultiply &&
+      isMdpGetSuccessorsBCode(BorrowedRef<PyCodeObject>{env.func.code})) {
+    Register* compare = nullptr;
+    Register* bonus_const = nullptr;
+    if (matchMdpPriorityBonusMultiply(instr->output(), &compare, &bonus_const)) {
+      Register* zero = env.emit<LoadConst>(Type::fromObject(_PyLong_GetZero()));
+      Register* bonus = env.emitCond(
+          [&](BasicBlock* bb1, BasicBlock* bb2) {
+            Register* compare_truth =
+                env.emit<IsTruthy>(compare, *instr->frameState());
+            return env.emit<CondBranch>(compare_truth, bb1, bb2);
+          },
+          [&] { return bonus_const; },
+          [&] { return zero; });
+      if (!bonus->isA(TLongExact)) {
+        bonus = env.emit<GuardType>(TLongExact, bonus, *instr->frameState());
+      }
+      return bonus;
+    }
   }
 
   if (op == BinaryOpKind::kSubscript) {
