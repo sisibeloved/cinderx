@@ -95,16 +95,41 @@ def cinderx_wheel_glob() -> Path:
     return Path(os.environ.get("CINDERX_WHEEL_GLOB", "/dist/cinderx-*-linux_aarch64.whl"))
 
 
-def cinderx_runtime_env(name: str, enable_optimization: bool) -> dict[str, str]:
-    if not enable_optimization:
-        return {}
-    if name == "generators":
-        return {"PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY": "1"}
-    if name == "mdp":
-        return {
-            "PYTHONJIT_ARM_MDP_INT_CLAMP_MIN_MAX": "1",
-            "PYTHONJIT_ARM_MDP_FRACTION_MIN_COMPARE": "1",
-            "PYTHONJIT_ARM_MDP_PRIORITY_COMPARE_ADD": "1",
-        }
+def default_opt_env_file(name: str) -> Path:
     resolve_benchmark(name)
-    return {}
+    return Path("/scripts/configs") / name / "stable.env"
+
+
+def results_root() -> Path:
+    return Path(os.environ.get("RESULTS_ROOT", "/results"))
+
+
+def load_opt_env_file(path: Path | str | None) -> dict[str, str]:
+    if path is None:
+        return {}
+    env_path = Path(path)
+    if not env_path.exists():
+        return {}
+    env: dict[str, str] = {}
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, sep, value = line.partition("=")
+        if not sep or not key:
+            raise ValueError(f"invalid env line in {env_path}: {raw_line!r}")
+        env[key] = value
+    return env
+
+
+def opt_config_name(path: Path | str | None, enable_optimization: bool) -> str:
+    if not enable_optimization:
+        return "baseline"
+    if path is None:
+        return "stable"
+    return Path(path).stem
+
+
+def comparison_results_path(results_root: Path | str, benchmark: str, config_name: str) -> Path:
+    return Path(results_root) / benchmark / config_name / "comparison.json"
+

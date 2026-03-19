@@ -36,6 +36,7 @@ RUN mkdir -p /root/benchmarks /results /opt/cpython-jit
 
 # Install benchmark and runner scripts inside the image.
 COPY scripts /scripts
+COPY configs /scripts/configs
 RUN chmod +x /scripts/*.sh /scripts/*.py
 
 # Set up working directory

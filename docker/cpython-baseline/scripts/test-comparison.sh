@@ -6,6 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SAMPLES=${SAMPLES:-10}
 WARMUP=${WARMUP:-3}
 BENCHMARK=${BENCHMARK:-generators}
+OPT_ENV_FILE=${OPT_ENV_FILE:-}
+OPT_CONFIG_NAME=${OPT_CONFIG_NAME:-}
 
 echo "========================================"
 echo "  CinderX Performance Comparison"
@@ -13,6 +15,10 @@ echo "========================================"
 echo "Samples: $SAMPLES"
 echo "Warmup:  $WARMUP"
 echo "Benchmark: $BENCHMARK"
+echo "Optimization config: ${OPT_CONFIG_NAME:-stable}"
+if [ -n "$OPT_ENV_FILE" ]; then
+  echo "Optimization env file: $OPT_ENV_FILE"
+fi
 echo ""
 
 # Prepare benchmark
@@ -75,7 +81,7 @@ echo ""
 echo "========================================"
 echo "  Test 3: CinderX (optimized)"
 echo "========================================"
-BENCHMARK="$BENCHMARK" ENABLE_OPTIMIZATION=1 /scripts/test-cinderx.sh 2>&1 | tee /tmp/cinderx-optimized.txt
+BENCHMARK="$BENCHMARK" ENABLE_OPTIMIZATION=1 OPT_ENV_FILE="$OPT_ENV_FILE" OPT_CONFIG_NAME="$OPT_CONFIG_NAME" /scripts/test-cinderx.sh 2>&1 | tee /tmp/cinderx-optimized.txt
 
 echo ""
 
@@ -84,10 +90,19 @@ echo "========================================"
 echo "  COMPARISON"
 echo "========================================"
 
-export SAMPLES WARMUP
+export SAMPLES WARMUP BENCHMARK OPT_ENV_FILE OPT_CONFIG_NAME
 python3 << 'PY'
 import os
 import re
+import sys
+
+sys.path.insert(0, "/scripts")
+from benchmark_harness import (
+    comparison_results_path,
+    default_opt_env_file,
+    opt_config_name,
+    results_root,
+)
 
 def extract_time(filename, pattern="Result"):
     with open(filename) as f:
@@ -143,9 +158,16 @@ if baseline and cinderx_baseline:
 if baseline and cinderx_optimized:
     results["speedup_cinderx_optimized"] = baseline / cinderx_optimized
 
-with open("/results/comparison.json", "w") as f:
+benchmark = os.environ.get("BENCHMARK", "generators")
+enable_optimization = True
+opt_env_file = os.environ.get("OPT_ENV_FILE") or str(default_opt_env_file(benchmark))
+config_name = os.environ.get("OPT_CONFIG_NAME") or opt_config_name(opt_env_file, enable_optimization)
+output_path = comparison_results_path(results_root(), benchmark, config_name)
+output_path.parent.mkdir(parents=True, exist_ok=True)
+
+with open(output_path, "w") as f:
     json.dump(results, f, indent=2)
-    print(f"\nResults saved to /results/comparison.json")
+    print(f"\nResults saved to {output_path}")
 PY
 
 echo ""

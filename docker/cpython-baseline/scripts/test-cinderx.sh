@@ -7,6 +7,8 @@ SAMPLES=${SAMPLES:-10}
 WARMUP=${WARMUP:-3}
 BENCHMARK=${BENCHMARK:-generators}
 ENABLE_OPTIMIZATION=${ENABLE_OPTIMIZATION:-0}
+OPT_ENV_FILE=${OPT_ENV_FILE:-}
+OPT_CONFIG_NAME=${OPT_CONFIG_NAME:-}
 
 echo "=== CPython + CinderX Test ==="
 echo "Benchmark: $BENCHMARK"
@@ -30,18 +32,31 @@ print(f'CINDERX_WHEEL="{matches[-1]}"')
 PY
 )"
 
-export BENCHMARK ENABLE_OPTIMIZATION
+export BENCHMARK ENABLE_OPTIMIZATION OPT_ENV_FILE OPT_CONFIG_NAME
 eval "$(python3 <<'PY'
 import os
 import sys
 
 sys.path.insert(0, os.environ["SCRIPT_DIR"])
-from benchmark_harness import cinderx_runtime_env
-
-env = cinderx_runtime_env(
-    os.environ["BENCHMARK"],
-    enable_optimization=os.environ["ENABLE_OPTIMIZATION"] not in ("", "0"),
+from benchmark_harness import (
+    default_opt_env_file,
+    load_opt_env_file,
+    opt_config_name,
 )
+
+enabled = os.environ["ENABLE_OPTIMIZATION"] not in ("", "0")
+env = {}
+resolved_env_file = ""
+config_name = opt_config_name(os.environ.get("OPT_ENV_FILE") or None, enabled)
+if enabled:
+    candidate = os.environ.get("OPT_ENV_FILE") or str(default_opt_env_file(os.environ["BENCHMARK"]))
+    resolved_env_file = candidate
+    env = load_opt_env_file(candidate)
+    if os.environ.get("OPT_CONFIG_NAME"):
+        config_name = os.environ["OPT_CONFIG_NAME"]
+
+print(f'export OPT_CONFIG_NAME_RESOLVED="{config_name}"')
+print(f'export OPT_ENV_FILE_RESOLVED="{resolved_env_file}"')
 for key, value in env.items():
     print(f'export {key}="{value}"')
 PY
@@ -81,6 +96,9 @@ opt_env = {
     if key.startswith("PYTHONJIT_ARM_")
 }
 if opt_env:
+    print(f"Optimization config: {os.environ.get('OPT_CONFIG_NAME_RESOLVED', 'unknown')}")
+    if os.environ.get("OPT_ENV_FILE_RESOLVED"):
+        print(f"Optimization env file: {os.environ['OPT_ENV_FILE_RESOLVED']}")
     for key in sorted(opt_env):
         print(f"Optimization enabled: {key}={opt_env[key]}")
 

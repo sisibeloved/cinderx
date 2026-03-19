@@ -4,8 +4,6 @@ import sys
 import tempfile
 import textwrap
 import unittest
-
-
 def _load_harness():
     root = pathlib.Path(__file__).resolve().parent
     path = root / "benchmark_harness.py"
@@ -116,27 +114,87 @@ class BenchmarkHarnessTests(unittest.TestCase):
             pathlib.Path("/dist/cinderx-*-linux_aarch64.whl"),
         )
 
-    def test_cinderx_runtime_env_uses_generator_flag_for_generators(self) -> None:
+    def test_load_opt_env_file_reads_key_value_pairs(self) -> None:
+        harness = _load_harness()
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = pathlib.Path(tmp) / "round3.env"
+            env_file.write_text(
+                textwrap.dedent(
+                    """
+                    # comment
+                    PYTHONJIT_ARM_MDP_INT_CLAMP_MIN_MAX=1
+                    PYTHONJIT_ARM_MDP_FRACTION_MIN_COMPARE=1
+
+                    """
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                harness.load_opt_env_file(env_file),
+                {
+                    "PYTHONJIT_ARM_MDP_INT_CLAMP_MIN_MAX": "1",
+                    "PYTHONJIT_ARM_MDP_FRACTION_MIN_COMPARE": "1",
+                },
+            )
+
+    def test_load_opt_env_file_missing_is_empty(self) -> None:
+        harness = _load_harness()
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = pathlib.Path(tmp) / "missing.env"
+            self.assertEqual(harness.load_opt_env_file(env_file), {})
+
+    def test_load_opt_env_file_rejects_invalid_line(self) -> None:
+        harness = _load_harness()
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = pathlib.Path(tmp) / "broken.env"
+            env_file.write_text("NOT A VALID LINE\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                harness.load_opt_env_file(env_file)
+
+    def test_opt_config_name_defaults_to_stable(self) -> None:
+        harness = _load_harness()
+        self.assertEqual(harness.opt_config_name(None, enable_optimization=True), "stable")
+
+    def test_opt_config_name_uses_env_file_stem(self) -> None:
         harness = _load_harness()
         self.assertEqual(
-            harness.cinderx_runtime_env("generators", enable_optimization=True),
-            {"PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY": "1"},
+            harness.opt_config_name("/tmp/mdp/stable.env", enable_optimization=True),
+            "stable",
         )
 
-    def test_cinderx_runtime_env_uses_mdp_flags_for_mdp(self) -> None:
+    def test_opt_config_name_uses_baseline_when_disabled(self) -> None:
         harness = _load_harness()
         self.assertEqual(
-            harness.cinderx_runtime_env("mdp", enable_optimization=True),
-            {
-                "PYTHONJIT_ARM_MDP_INT_CLAMP_MIN_MAX": "1",
-                "PYTHONJIT_ARM_MDP_FRACTION_MIN_COMPARE": "1",
-                "PYTHONJIT_ARM_MDP_PRIORITY_COMPARE_ADD": "1",
-            },
+            harness.opt_config_name("/tmp/mdp/stable.env", enable_optimization=False),
+            "baseline",
         )
 
-    def test_cinderx_runtime_env_is_empty_when_optimization_disabled(self) -> None:
+    def test_comparison_results_path_nests_by_benchmark_and_config(self) -> None:
         harness = _load_harness()
-        self.assertEqual(harness.cinderx_runtime_env("mdp", enable_optimization=False), {})
+        with tempfile.TemporaryDirectory() as tmp:
+            results_root = pathlib.Path(tmp)
+            path = harness.comparison_results_path(results_root, "mdp", "stable")
+            self.assertEqual(path, results_root / "mdp" / "stable" / "comparison.json")
+
+    def test_default_opt_env_file_uses_configs_directory(self) -> None:
+        harness = _load_harness()
+        self.assertEqual(
+            harness.default_opt_env_file("mdp"),
+            pathlib.Path("/scripts/configs/mdp/stable.env"),
+        )
+
+    def test_results_root_defaults_to_results_directory(self) -> None:
+        harness = _load_harness()
+        self.assertEqual(harness.results_root(), pathlib.Path("/results"))
+
+    def test_base_image_name_defaults_to_shared_arm64_image(self) -> None:
+        compose_text = pathlib.Path("docker/cpython-baseline/docker-compose.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'image: ${BASE_IMAGE:-cinderx-cpython-baseline:arm64}',
+            compose_text,
+        )
 
 
 if __name__ == "__main__":

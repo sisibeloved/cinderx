@@ -9,7 +9,8 @@
 ### 1. 构建 CinderX wheel（在宿主机）
 
 ```bash
-cd /Users/luchen/Repo/cinderx
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
 
 # 使用 Docker 交叉编译 ARM64 wheel
 docker run --rm --platform linux/arm64 \
@@ -25,21 +26,91 @@ docker run --rm --platform linux/arm64 \
   '
 ```
 
-### 2. 启动测试容器
+### 2. 构建公共基础镜像
 
 ```bash
-cd /Users/luchen/Repo/cinderx/docker/cpython-baseline
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT/docker/cpython-baseline"
+docker compose build
+```
+
+这一步只在基础镜像变化时需要执行，例如：
+
+- `Dockerfile`
+- 系统依赖
+- 基础 Python 镜像版本
+
+镜像名固定为 `cinderx-cpython-baseline:arm64`，不会因为 compose project name 不同而变化。
+
+### 3. 启动测试容器
+
+```bash
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT/docker/cpython-baseline"
 docker compose up -d
 docker compose exec cpython-baseline bash
 ```
 
-### 3. 在容器内安装 CinderX
+首次构建基础镜像时仍需要宿主机具备 `linux/arm64` 容器构建能力；但镜像一旦构建完成，后续切换实验、脚本、配置或 compose project name 都不应该触发重建。
+
+### 并行项目隔离
+
+推荐每次正式对照分配独立的 compose project 和结果目录：
+
+```bash
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT/docker/cpython-baseline"
+RESULTS_DIR=./results-mdp-round3 docker compose -p mdp-round3 up -d
+```
+
+这样可以避免不同正式对照任务共享同一个 compose project、容器实例与结果文件。
+不同 project 会复用同一个基础镜像 `cinderx-cpython-baseline:arm64`，不会因为 `-p` 不同而重新构建镜像。
+
+### 配置文件驱动的优化开关
+
+稳定配置统一放在：
+
+- `docker/cpython-baseline/configs/generators/`
+- `docker/cpython-baseline/configs/mdp/`
+
+例如：
+
+- `docker/cpython-baseline/configs/mdp/stable.env`
+
+运行时通过 `OPT_ENV_FILE` 选择当前正式对照所用的稳定配置：
+
+```bash
+docker compose -p mdp-round3 exec cpython-baseline sh -lc \
+  'BENCHMARK=mdp OPT_ENV_FILE=/scripts/configs/mdp/stable.env SAMPLES=5 WARMUP=1 /scripts/test-comparison.sh'
+```
+
+结果会按 `results/<benchmark>/<config-name>/comparison.json` 分层落盘，减少不同实验之间的覆盖与冲突。
+
+### 额外环境约定
+
+- `CPYTHON_ROOT`：stock CPython 3.14 JIT 源码目录，默认是 `$HOME/Repo/cpython`
+- compose project name：用 `docker compose -p <name>` 指定，用于隔离并行实验
+- `RESULTS_DIR`：宿主机结果目录，用于隔离并行实验输出
+- `BASE_IMAGE`：公共基础镜像名，默认是 `cinderx-cpython-baseline:arm64`
+
+例如：
+
+```bash
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT/docker/cpython-baseline"
+BASE_IMAGE=cinderx-cpython-baseline:arm64 \
+CPYTHON_ROOT="$HOME/Repo/cpython" \
+RESULTS_DIR=./results-mdp-stable \
+docker compose -p mdp-stable up -d
+```
+
+### 4. 在容器内安装 CinderX
 
 ```bash
 pip install /dist/cinderx-*-linux_aarch64.whl
 ```
 
-### 4. 准备 benchmark
+### 5. 准备 benchmark
 
 **重要：** 路径必须包含 `bm_generators/run_benchmark.py`，否则 none-truthy 优化不会触发。
 
@@ -64,7 +135,7 @@ print("✓ pyperf shim written")
 PY
 ```
 
-### 5. 测试 CPython baseline
+### 6. 测试 CPython baseline
 
 ```bash
 python3 << 'PY'
@@ -91,7 +162,7 @@ print(f"\nBaseline: {avg:.6f}s")
 PY
 ```
 
-### 6. 测试 CinderX
+### 7. 测试 CinderX
 
 ```bash
 python3 << 'PY'
@@ -124,7 +195,7 @@ print(f"\nCinderX: {avg:.6f}s")
 PY
 ```
 
-### 7. 测试 CinderX + 优化
+### 8. 测试 CinderX + 优化
 
 ```bash
 PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY=1 python3 << 'PY'
@@ -214,6 +285,8 @@ none-truthy opt benefit: 1.0120x (+1.20%)  ← 核心收益指标
 
 ```bash
 docker compose down
+# 如果用了独立 project name：
+docker compose -p mdp-round3 down
 ```
 
 ## 故障排除
@@ -224,6 +297,17 @@ docker compose down
 python3 --version  # 应该是 3.14.x
 pip debug --verbose  # 检查兼容的 tag
 ```
+
+### `docker compose up -d --build` 出现 `exec format error`
+
+这通常说明当前宿主机的 Docker 环境没有正确启用 `linux/arm64` 容器构建能力。
+
+可检查：
+
+- Docker Desktop 的 `Use Rosetta for x86/amd64 emulation` 或等价的 QEMU/binfmt 配置是否正常
+- 是否已经存在可复用的 `linux/arm64` 镜像
+
+一旦基础镜像已构建完成，后续只改 `scripts/` 或 `configs/` 时通常不需要重建镜像，因为这两个目录已经通过 bind mount 直接挂进容器。
 
 ### JIT 没有启用
 ```bash
