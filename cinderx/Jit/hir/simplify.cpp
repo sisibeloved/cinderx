@@ -61,6 +61,9 @@ namespace jit::hir {
 // functions.
 
 namespace {
+struct Env;
+static bool isBuiltin(Register* callable, const char* name);
+
 bool armListSliceConcatEnabled() {
   const char* env = std::getenv("PYTHONJIT_ARM_LIST_SLICE_CONCAT");
   return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
@@ -102,12 +105,6 @@ bool armMdpFractionMinCompareEnabled() {
 
 bool armMdpPriorityCompareAddEnabled() {
   const char* env = std::getenv("PYTHONJIT_ARM_MDP_PRIORITY_COMPARE_ADD");
-  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
-}
-
-bool armMdpGetSuccessorsMissHelperEnabled() {
-  const char* env =
-      std::getenv("PYTHONJIT_ARM_MDP_GET_SUCCESSORS_MISS_HELPER");
   return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
 }
 
@@ -248,48 +245,41 @@ bool isMdpGetSuccessorsBCode(BorrowedRef<PyCodeObject> code) {
       std::strstr(filename, "bm_mdp/run_benchmark.py") != nullptr;
 }
 
-bool isMdpGetSuccessorsCode(BorrowedRef<PyCodeObject> code) {
-  if (code == nullptr || !PyUnicode_Check(code->co_qualname) ||
-      !PyUnicode_Check(code->co_filename)) {
-    return false;
-  }
-  const char* qualname = PyUnicode_AsUTF8(code->co_qualname);
-  const char* filename = PyUnicode_AsUTF8(code->co_filename);
-  if (qualname == nullptr || filename == nullptr) {
-    PyErr_Clear();
-    return false;
-  }
-  return std::strcmp(qualname, "Battle.getSuccessors") == 0 &&
-      std::strstr(filename, "bm_mdp/run_benchmark.py") != nullptr;
-}
-
-Register* getMdpGetSuccessorsSelf(Register* reg) {
-  if (reg == nullptr) {
+BorrowedRef<PyCodeObject> getMakeFunctionCodeForSimplify(Register* reg) {
+  reg = modelReg(reg);
+  if (reg == nullptr || !reg->instr()->IsMakeFunction()) {
     return nullptr;
   }
+  Register* code = modelReg(reg->instr()->GetOperand(0));
+  if (code == nullptr) {
+    return nullptr;
+  }
+  PyObject* obj = nullptr;
+  if (code->instr()->IsLoadConst()) {
+    obj = static_cast<LoadConst*>(code->instr())->type().asObject();
+  } else if (code->type().hasObjectSpec()) {
+    obj = code->type().objectSpec();
+  }
+  if (obj == nullptr || !PyCode_Check(obj)) {
+    return nullptr;
+  }
+  return reinterpret_cast<PyCodeObject*>(obj);
+}
 
-  const Instr* instr = reg->instr();
-  if (instr->IsLoadAttr() || instr->IsLoadField()) {
-    return instr->GetOperand(0);
+Register* findFunctionClosureForSimplify(BasicBlock* block, Register* func) {
+  func = modelReg(func);
+  if (block == nullptr || func == nullptr) {
+    return nullptr;
   }
-  if (instr->IsCheckField()) {
-    return getMdpGetSuccessorsSelf(instr->GetOperand(0));
-  }
-  if (instr->IsPhi()) {
-    auto* phi = static_cast<const Phi*>(instr);
-    Register* self = nullptr;
-    for (size_t i = 0; i < phi->NumOperands(); i++) {
-      Register* cur = getMdpGetSuccessorsSelf(phi->GetOperand(i));
-      if (cur == nullptr) {
-        return nullptr;
-      }
-      if (self == nullptr) {
-        self = cur;
-      } else if (self != cur) {
-        return nullptr;
-      }
+  for (auto it = block->rbegin(); it != block->rend(); ++it) {
+    if (!it->IsSetFunctionAttr()) {
+      continue;
     }
-    return self;
+    auto* set_attr = static_cast<SetFunctionAttr*>(&*it);
+    if (set_attr->field() == FunctionAttr::kClosure &&
+        modelReg(set_attr->base()) == func) {
+      return set_attr->value();
+    }
   }
   return nullptr;
 }
@@ -1590,21 +1580,6 @@ Register* simplifyBinaryOp(Env& env, const BinaryOp* instr) {
   }
 
   if (op == BinaryOpKind::kSubscript) {
-    if (armMdpGetSuccessorsMissHelperEnabled() &&
-        isMdpGetSuccessorsCode(BorrowedRef<PyCodeObject>{env.func.code})) {
-      Register* self = getMdpGetSuccessorsSelf(lhs);
-      if (self != nullptr) {
-        Register* result = env.emitVariadic<CallStatic>(
-            3,
-            reinterpret_cast<void*>(JITRT_MdpGetSuccessorsCachedHelper),
-            instr->output()->type() | TNullptr,
-            self,
-            lhs,
-            rhs);
-        return env.emit<CheckExc>(result, *instr->frameState());
-      }
-    }
-
     if (lhs->isA(TDictExact)) {
       return env.emit<DictSubscr>(lhs, rhs, *instr->frameState());
     }

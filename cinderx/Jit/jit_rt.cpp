@@ -1113,35 +1113,6 @@ PyObject* JITRT_ComprehensionsDictGetHelper(PyObject* dict, PyObject* key) {
   return PyObject_CallMethodObjArgs(dict, name, key, nullptr);
 }
 
-PyObject* JITRT_MdpGetSuccessorsCacheLookup(PyObject* dict, PyObject* key) {
-  if (PyDict_CheckExact(dict)) {
-    PyObject* value = PyDict_GetItemWithError(dict, key);
-    if (value != nullptr) {
-      return Py_NewRef(value);
-    }
-    if (PyErr_Occurred()) {
-      return nullptr;
-    }
-    Py_RETURN_NONE;
-  }
-
-  return PyObject_GetItem(dict, key);
-}
-
-PyObject* JITRT_MdpGetSuccessorsCachedHelper(
-    PyObject* self_obj,
-    PyObject* dict,
-    PyObject* key) {
-  Ref<> cached = Ref<>::steal(JITRT_MdpGetSuccessorsCacheLookup(dict, key));
-  if (cached == nullptr) {
-    return nullptr;
-  }
-  if (cached != Py_None) {
-    return cached.release();
-  }
-  return JITRT_MdpGetSuccessorsMissHelper(self_obj, key);
-}
-
 namespace {
 
 PyObject* mdpSortedSuccessorItems(PyObject* dist) {
@@ -1201,66 +1172,6 @@ PyObject* mdpSortedSuccessorItems(PyObject* dist) {
 }
 
 } // namespace
-
-PyObject* JITRT_MdpGetSuccessorsMissHelper(PyObject* self_obj, PyObject* statep) {
-  Ref<> name_a = Ref<>::steal(PyUnicode_FromString("_getSuccessorsA"));
-  Ref<> name_b = Ref<>::steal(PyUnicode_FromString("_getSuccessorsB"));
-  Ref<> name_c = Ref<>::steal(PyUnicode_FromString("_getSuccessorsC"));
-  Ref<> name_cache = Ref<>::steal(PyUnicode_FromString("successors"));
-  if (name_a == nullptr || name_b == nullptr || name_c == nullptr ||
-      name_cache == nullptr) {
-    return nullptr;
-  }
-
-  Ref<> zero = Ref<>::steal(PyLong_FromLong(0));
-  if (zero == nullptr) {
-    return nullptr;
-  }
-  Ref<> state_tag = Ref<>::steal(PyObject_GetItem(statep, zero.get()));
-  if (state_tag == nullptr) {
-    return nullptr;
-  }
-  long st = PyLong_AsLong(state_tag);
-  if (st == -1 && PyErr_Occurred()) {
-    return nullptr;
-  }
-
-  Ref<> result;
-  if (st == 0) {
-    Ref<> successors =
-        Ref<>::steal(PyObject_CallMethodObjArgs(self_obj, name_a.get(), statep, nullptr));
-    if (successors == nullptr) {
-      return nullptr;
-    }
-    result = Ref<>::steal(PySequence_List(successors));
-  } else {
-    PyObject* method_name = st == 1 ? name_b.get() : name_c.get();
-    Ref<> dist =
-        Ref<>::steal(PyObject_CallMethodObjArgs(self_obj, method_name, statep, nullptr));
-    if (dist == nullptr) {
-      return nullptr;
-    }
-    result = Ref<>::steal(mdpSortedSuccessorItems(dist));
-  }
-  if (result == nullptr) {
-    return nullptr;
-  }
-
-  Ref<> cache = Ref<>::steal(PyObject_GetAttr(self_obj, name_cache.get()));
-  if (cache == nullptr) {
-    return nullptr;
-  }
-
-  int set_ok = PyDict_CheckExact(cache)
-      ? PyDict_SetItem(cache, statep, result)
-      : PyObject_SetItem(cache, statep, result);
-  if (set_ok < 0) {
-    return nullptr;
-  }
-
-  return result.release();
-}
-
 PyObject* JITRT_ComprehensionsListSortHelper(PyObject* list_obj) {
   if (PyList_CheckExact(list_obj)) {
     if (PyList_Sort(list_obj) < 0) {
