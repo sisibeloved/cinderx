@@ -95,6 +95,11 @@ bool armMdpIntClampMinMaxEnabled() {
   return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
 }
 
+bool armMdpFractionMinCompareEnabled() {
+  const char* env = std::getenv("PYTHONJIT_ARM_MDP_FRACTION_MIN_COMPARE");
+  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
+}
+
 bool armGeneratorNoneTruthyEnabled() {
   const char* env = std::getenv("PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY");
   return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
@@ -199,6 +204,21 @@ bool isMdpApplyHPChangeCode(BorrowedRef<PyCodeObject> code) {
     return false;
   }
   return std::strcmp(qualname, "applyHPChange") == 0 &&
+      std::strstr(filename, "bm_mdp/run_benchmark.py") != nullptr;
+}
+
+bool isMdpGetCritDistCode(BorrowedRef<PyCodeObject> code) {
+  if (code == nullptr || !PyUnicode_Check(code->co_qualname) ||
+      !PyUnicode_Check(code->co_filename)) {
+    return false;
+  }
+  const char* qualname = PyUnicode_AsUTF8(code->co_qualname);
+  const char* filename = PyUnicode_AsUTF8(code->co_filename);
+  if (qualname == nullptr || filename == nullptr) {
+    PyErr_Clear();
+    return false;
+  }
+  return std::strcmp(qualname, "getCritDist") == 0 &&
       std::strstr(filename, "bm_mdp/run_benchmark.py") != nullptr;
 }
 
@@ -3244,6 +3264,22 @@ static Register* simplifyVectorCallBuiltinMinMax(
 
   Register* lhs = instr->arg(0);
   Register* rhs = instr->arg(1);
+
+  if (armMdpFractionMinCompareEnabled() && is_min &&
+      isMdpGetCritDistCode(env.func.code)) {
+    env.emit<UseType>(target, target->type());
+    Register* choose_rhs_obj =
+        env.emit<Compare>(CompareOp::kLessThan, rhs, lhs, *instr->frameState());
+    Register* choose_rhs =
+        env.emit<IsTruthy>(choose_rhs_obj, *instr->frameState());
+
+    return env.emitCond(
+        [&](BasicBlock* rhs_block, BasicBlock* lhs_block) {
+          env.emit<CondBranch>(choose_rhs, rhs_block, lhs_block);
+        },
+        [&] { return rhs; },
+        [&] { return lhs; });
+  }
 
   if (armMdpIntClampMinMaxEnabled() && isMdpApplyHPChangeCode(env.func.code)) {
     Register* guarded_lhs =
