@@ -2,36 +2,41 @@
 # Setup cinderx and dependencies in the container
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BENCHMARK=${BENCHMARK:-generators}
+
 echo "=== Installing cinderx ==="
 pip3 install --quiet /dist/cinderx-*-linux_aarch64.whl 2>&1 | grep -v notice | tail -1
 
-echo "=== Downloading generators benchmark ==="
+echo "=== Preparing benchmark: $BENCHMARK ==="
 # Download benchmark files manually (pip is broken in Python 3.14)
 mkdir -p /root/benchmarks
+export SCRIPT_DIR BENCHMARK
 python3 << 'PY'
 import urllib.request
 import pathlib
+import sys
+import os
 
-# Download run_benchmark.py
-url = "https://raw.githubusercontent.com/python/pyperformance/main/pyperformance/data-files/benchmarks/bm_generators/run_benchmark.py"
-output_path = "/root/benchmarks/run_benchmark.py"
+sys.path.insert(0, os.environ["SCRIPT_DIR"])
+from benchmark_harness import benchmark_module_path, benchmark_root, pyperf_shim_code, resolve_benchmark
 
-print(f"Downloading {url}...")
-urllib.request.urlretrieve(url, output_path)
+benchmark = os.environ["BENCHMARK"]
+spec = resolve_benchmark(benchmark)
+output_path = benchmark_module_path(benchmark_root(), benchmark)
+output_path.parent.mkdir(parents=True, exist_ok=True)
+
+print(f"Downloading {spec.benchmark_url}...")
+urllib.request.urlretrieve(spec.benchmark_url, output_path)
 print(f"✓ Saved to {output_path}")
 
-# Create minimal pyperf shim
-pyperf_code = '''
-import time
-perf_counter = time.perf_counter
-
-class Runner:
-    pass
-'''
-
 pyperf_path = pathlib.Path("/root/benchmarks/pyperf.py")
-pyperf_path.write_text(pyperf_code)
+pyperf_path.write_text(pyperf_shim_code(), encoding="utf-8")
 print(f"✓ Created pyperf shim at {pyperf_path}")
+
+local_pyperf_path = output_path.parent / "pyperf.py"
+local_pyperf_path.write_text(pyperf_shim_code(), encoding="utf-8")
+print(f"✓ Created local pyperf shim at {local_pyperf_path}")
 PY
 
 echo "=== Verifying installation ==="
@@ -46,4 +51,4 @@ PY
 echo ""
 echo "=== Setup complete ==="
 echo "Run '/scripts/smoke.sh' to verify JIT functionality"
-echo "Run '/scripts/test-generators.sh' to run benchmark comparison"
+echo "Run 'BENCHMARK=$BENCHMARK /scripts/test-benchmark.sh' to run benchmark comparison"

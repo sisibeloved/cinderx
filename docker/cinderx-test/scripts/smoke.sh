@@ -35,7 +35,7 @@ print(f"✓ gen(n) compiled: {jit.get_compiled_size(gen)} bytes")
 print("\nTest 3: Tree.__iter__ compilation (if available)")
 try:
     import sys
-    sys.path.insert(0, "/root/benchmarks")
+    sys.path.insert(0, "/root/benchmarks/bm_generators")
     from run_benchmark import Tree
 
     result = jit.force_compile(Tree.__iter__)

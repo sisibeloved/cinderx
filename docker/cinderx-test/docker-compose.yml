@@ -1,10 +1,7 @@
-version: '3.8'
-
 services:
   cinderx-arm64:
-    image: python:3.14-slim
+    image: ${BASE_IMAGE:-python:3.14-slim}
     platform: linux/arm64
-    container_name: cinderx-arm64-test
     hostname: cinderx-arm64
 
     # Mounts
@@ -13,15 +10,19 @@ services:
       - ../../dist:/dist:ro
       # Test scripts
       - ./scripts:/scripts:ro
+      # Benchmark configs
+      - ./configs:/scripts/configs:ro
+      # Benchmark results
+      - ${RESULTS_DIR:-./results}:/results
       # Cache for pyperformance
       - cinderx-bench-cache:/root/.cache
 
     # Environment
     environment:
+      - RESULTS_ROOT=/results
       - PYTHONUNBUFFERED=1
       - PYTHONJIT=${PYTHONJIT:-1}
       - PYTHONJITAUTO=${PYTHONJITAUTO:-50}
-      - PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY=${PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY:-0}
 
     # Keep container running
     stdin_open: true

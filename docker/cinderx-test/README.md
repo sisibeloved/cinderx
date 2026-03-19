@@ -1,123 +1,145 @@
 # CinderX ARM64 Docker Test Environment
 
-This directory contains a Docker Compose setup for testing CinderX on ARM64.
+这个目录用于日常实验型容器测试。它与 `docker/cpython-baseline` 的职责不同：
 
-## Quick Start
+- `docker/cinderx-test`：快速实验、频繁切换 benchmark 与优化开关
+- `docker/cpython-baseline`：正式对照 `stock CPython JIT vs CinderX JIT`
 
-### 1. Build the ARM64 wheel
+## 快速开始
+
+### 1. 构建 ARM64 wheel
 
 ```bash
-cd /Users/luchen/Repo/cinderx
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
 ./docker/cinderx-test/scripts/build-wheel.sh
 ```
 
-### 2. Start the container
+### 2. 启动实验容器
 
 ```bash
-cd docker/cinderx-test
-docker-compose up -d
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT/docker/cinderx-test"
+docker compose -p cinderx-exp up -d
 ```
 
-### 3. Setup and run tests
+### 3. 准备 benchmark 并安装 CinderX
 
 ```bash
-# Install cinderx and dependencies
-docker exec cinderx-arm64-test /scripts/setup.sh
-
-# Run smoke tests
-docker exec cinderx-arm64-test /scripts/smoke.sh
-
-# Run generators benchmark comparison
-docker exec cinderx-arm64-test /scripts/test-generators.sh
+docker compose -p cinderx-exp exec cinderx-arm64 sh -lc \
+  'BENCHMARK=generators /scripts/setup.sh'
 ```
 
-## Detailed Usage
-
-### Running Individual Benchmarks
+### 4. 运行 smoke test
 
 ```bash
-# Run baseline only
-docker exec cinderx-arm64-test /scripts/bench-generators.sh
-
-# Run with optimization
-docker exec -e PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY=1 \
-  cinderx-arm64-test /scripts/bench-generators.sh
-
-# Run with custom parameters
-docker exec -e SAMPLES=20 -e WARMUP=5 \
-  cinderx-arm64-test /scripts/bench-generators.sh
+docker compose -p cinderx-exp exec cinderx-arm64 /scripts/smoke.sh
 ```
 
-### Interactive Exploration
+### 5. 跑 benchmark 对比
 
 ```bash
-# Open a shell in the container
-docker exec -it cinderx-arm64-test bash
-
-# Inside the container:
-python3 -c "import cinderx; print(cinderx.__version__)"
-python3 -m pyperformance run --debug-single-value -b generators
+docker compose -p cinderx-exp exec cinderx-arm64 sh -lc \
+  'BENCHMARK=generators /scripts/test-benchmark.sh'
 ```
 
-### Checking HIR
+## 支持的 benchmark
+
+当前已支持：
+
+- `generators`
+- `mdp`
+
+benchmark 的元数据在：
+
+- `docker/cinderx-test/scripts/benchmark_harness.py`
+
+## 配置文件驱动的优化开关
+
+稳定与实验开关统一放在：
+
+- `docker/cinderx-test/configs/generators/`
+- `docker/cinderx-test/configs/mdp/`
+
+例如：
+
+- `docker/cinderx-test/configs/generators/stable.env`
+- `docker/cinderx-test/configs/mdp/stable.env`
+- `docker/cinderx-test/configs/mdp/experimental-round4.env`
+
+运行 `mdp stable`：
 
 ```bash
-docker exec cinderx-arm64-test bash -c '
-  PYTHONJITDUMPFINALHIR=1 \
-  python3 -c "
-import sys
-sys.path.insert(0, \"/usr/local/lib/python3.14/site-packages/pyperformance/data-files/benchmarks/bm_generators\")
-from run_benchmark import Tree
-import cinderx.jit as jit
-jit.force_compile(Tree.__iter__)
-" 2>&1 | grep -A 20 "Tree.__iter__"
-'
+docker compose -p cinderx-exp exec cinderx-arm64 sh -lc \
+  'BENCHMARK=mdp OPT_ENV_FILE=/scripts/configs/mdp/stable.env SAMPLES=5 WARMUP=1 /scripts/test-benchmark.sh'
 ```
 
-### Cleaning Up
+运行 `mdp experimental-round4`：
 
 ```bash
-# Stop and remove container
-docker-compose down
-
-# Remove cache
-docker-compose down -v
+docker compose -p cinderx-exp exec cinderx-arm64 sh -lc \
+  'BENCHMARK=mdp OPT_ENV_FILE=/scripts/configs/mdp/experimental-round4.env OPT_CONFIG_NAME=experimental-round4 SAMPLES=5 WARMUP=1 /scripts/test-benchmark.sh'
 ```
 
-## Environment Variables
+## 并行项目隔离
 
-- `PYTHONJIT` - Enable JIT (default: 1)
-- `PYTHONJITAUTO` - Auto-JIT threshold (default: 50)
-- `PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY` - Enable IsTruthy optimization (default: 0)
-- `SAMPLES` - Number of benchmark samples (default: 10)
-- `WARMUP` - Number of warmup runs (default: 3)
+隔离方式使用 compose project name 和结果目录，而不是固定容器名：
 
-## Files
-
-```
-docker/cinderx-test/
-├── docker-compose.yml      # Container configuration
-├── scripts/
-│   ├── build-wheel.sh      # Build ARM64 wheel
-│   ├── setup.sh            # Install dependencies
-│   ├── smoke.sh            # Smoke tests
-│   ├── bench-generators.sh # Single benchmark run
-│   └── test-generators.sh  # Full comparison test
-└── README.md               # This file
+```bash
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT/docker/cinderx-test"
+RESULTS_DIR=./results-mdp docker compose -p mdp-exp up -d
+RESULTS_DIR=./results-generators docker compose -p generators-exp up -d
 ```
 
-## Important Notes
+这样多组实验可以共享同一个基础镜像 `python:3.14-slim`，但实例、网络、缓存和结果目录彼此隔离。
 
-1. **Performance Data**: Docker ARM64 simulation uses QEMU, which introduces overhead. Performance data is not precise and should only be used for functional verification.
+## 常用命令
 
-2. **Path Requirements**: The `Tree.__iter__` optimization only triggers when the file path contains `bm_generators/run_benchmark.py`. Using the real pyperformance benchmark ensures this condition is met.
+单次跑某个 benchmark：
 
-3. **Expected Results**: On Docker simulation, expect ~0.2% improvement. On real ARM hardware, expect ~0.79% improvement (based on analysis).
+```bash
+docker compose -p cinderx-exp exec cinderx-arm64 sh -lc \
+  'BENCHMARK=mdp SAMPLES=10 WARMUP=3 /scripts/bench-benchmark.sh'
+```
 
-4. **Resource Limits**: The default docker-compose.yml doesn't set resource limits. If you encounter OOM, you can add:
-   ```yaml
-   deploy:
-     resources:
-       limits:
-         memory: 4G
-   ```
+兼容旧入口：
+
+```bash
+docker compose -p cinderx-exp exec cinderx-arm64 /scripts/bench-generators.sh
+docker compose -p cinderx-exp exec cinderx-arm64 /scripts/test-generators.sh
+```
+
+交互式进入容器：
+
+```bash
+docker compose -p cinderx-exp exec cinderx-arm64 bash
+```
+
+## 结果路径
+
+对比结果会按 benchmark/config 分层落盘：
+
+- `/results/<benchmark>/<config-name>/comparison.json`
+
+例如：
+
+- `/results/generators/stable/comparison.json`
+- `/results/mdp/stable/comparison.json`
+- `/results/mdp/experimental-round4/comparison.json`
+
+## 环境变量
+
+- `BENCHMARK`：要运行的 benchmark，例如 `generators`、`mdp`
+- `OPT_ENV_FILE`：优化开关配置文件路径
+- `OPT_CONFIG_NAME`：结果标签；默认取 `.env` 文件名
+- `SAMPLES`：采样次数，默认 `10`
+- `WARMUP`：预热次数，默认 `3`
+- `RESULTS_DIR`：宿主机结果目录
+- `BASE_IMAGE`：公共基础镜像名，默认 `python:3.14-slim`
+
+## 注意事项
+
+1. Docker ARM64 仿真依赖 QEMU，性能数据只适合做方向验证，不适合作为正式基线。
+2. `generators` 的路径仍要求包含 `bm_generators/run_benchmark.py`，当前 `setup.sh` 已按真实 benchmark 目录结构准备。
+3. 这套容器的基础镜像应该保持稳定复用；benchmark 脚本、配置、wheel 与结果都通过挂载提供，不应因为实验切换而重建镜像。
