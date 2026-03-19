@@ -219,6 +219,16 @@ PyObject* JITRT_ComprehensionsAnyKnobbyHelper(PyObject* widgets);
 PyObject* JITRT_ComprehensionsDictGetHelper(PyObject* dict, PyObject* key);
 
 /*
+ * Narrow helpers for bm_mdp.Battle.getSuccessors() cache hit/miss handling.
+ */
+PyObject* JITRT_MdpGetSuccessorsCacheLookup(PyObject* dict, PyObject* key);
+PyObject* JITRT_MdpGetSuccessorsCachedHelper(
+    PyObject* self_obj,
+    PyObject* dict,
+    PyObject* key);
+PyObject* JITRT_MdpGetSuccessorsMissHelper(PyObject* self_obj, PyObject* statep);
+
+/*
  * Narrow helper for bm_comprehensions sortable_widgets.sort().
  */
 PyObject* JITRT_ComprehensionsListSortHelper(PyObject* list_obj);

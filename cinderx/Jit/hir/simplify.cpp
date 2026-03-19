@@ -105,6 +105,12 @@ bool armMdpPriorityCompareAddEnabled() {
   return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
 }
 
+bool armMdpGetSuccessorsMissHelperEnabled() {
+  const char* env =
+      std::getenv("PYTHONJIT_ARM_MDP_GET_SUCCESSORS_MISS_HELPER");
+  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
+}
+
 bool armGeneratorNoneTruthyEnabled() {
   const char* env = std::getenv("PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY");
   return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
@@ -255,6 +261,37 @@ bool isMdpGetSuccessorsCode(BorrowedRef<PyCodeObject> code) {
   }
   return std::strcmp(qualname, "Battle.getSuccessors") == 0 &&
       std::strstr(filename, "bm_mdp/run_benchmark.py") != nullptr;
+}
+
+Register* getMdpGetSuccessorsSelf(Register* reg) {
+  if (reg == nullptr) {
+    return nullptr;
+  }
+
+  const Instr* instr = reg->instr();
+  if (instr->IsLoadAttr() || instr->IsLoadField()) {
+    return instr->GetOperand(0);
+  }
+  if (instr->IsCheckField()) {
+    return getMdpGetSuccessorsSelf(instr->GetOperand(0));
+  }
+  if (instr->IsPhi()) {
+    auto* phi = static_cast<const Phi*>(instr);
+    Register* self = nullptr;
+    for (size_t i = 0; i < phi->NumOperands(); i++) {
+      Register* cur = getMdpGetSuccessorsSelf(phi->GetOperand(i));
+      if (cur == nullptr) {
+        return nullptr;
+      }
+      if (self == nullptr) {
+        self = cur;
+      } else if (self != cur) {
+        return nullptr;
+      }
+    }
+    return self;
+  }
+  return nullptr;
 }
 
 bool isLongObjectConst(Register* reg, long expected) {
@@ -1553,6 +1590,21 @@ Register* simplifyBinaryOp(Env& env, const BinaryOp* instr) {
   }
 
   if (op == BinaryOpKind::kSubscript) {
+    if (armMdpGetSuccessorsMissHelperEnabled() &&
+        isMdpGetSuccessorsCode(BorrowedRef<PyCodeObject>{env.func.code})) {
+      Register* self = getMdpGetSuccessorsSelf(lhs);
+      if (self != nullptr) {
+        Register* result = env.emitVariadic<CallStatic>(
+            3,
+            reinterpret_cast<void*>(JITRT_MdpGetSuccessorsCachedHelper),
+            instr->output()->type() | TNullptr,
+            self,
+            lhs,
+            rhs);
+        return env.emit<CheckExc>(result, *instr->frameState());
+      }
+    }
+
     if (lhs->isA(TDictExact)) {
       return env.emit<DictSubscr>(lhs, rhs, *instr->frameState());
     }
