@@ -131,7 +131,6 @@ class BenchmarkHarnessTests(unittest.TestCase):
                 "PYTHONJIT_ARM_MDP_INT_CLAMP_MIN_MAX": "1",
                 "PYTHONJIT_ARM_MDP_FRACTION_MIN_COMPARE": "1",
                 "PYTHONJIT_ARM_MDP_PRIORITY_COMPARE_ADD": "1",
-                "PYTHONJIT_ARM_MDP_GET_SUCCESSORS_WHOLE_HELPER": "1",
             },
         )
 

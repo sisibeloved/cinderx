@@ -105,7 +105,6 @@ def cinderx_runtime_env(name: str, enable_optimization: bool) -> dict[str, str]:
             "PYTHONJIT_ARM_MDP_INT_CLAMP_MIN_MAX": "1",
             "PYTHONJIT_ARM_MDP_FRACTION_MIN_COMPARE": "1",
             "PYTHONJIT_ARM_MDP_PRIORITY_COMPARE_ADD": "1",
-            "PYTHONJIT_ARM_MDP_GET_SUCCESSORS_WHOLE_HELPER": "1",
         }
     resolve_benchmark(name)
     return {}

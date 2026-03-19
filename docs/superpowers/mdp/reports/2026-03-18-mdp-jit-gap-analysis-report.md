@@ -13,30 +13,30 @@
 - 已新增 `scripts/diagnostics/debug_hir_env.py`，统一生成本地 Debug venv 和 `mdp` HIR 抓取命令
 - 已完成第一轮本地近似基线与热点白名单归因
 - 已完成 ARM Docker 第一轮正式对照，并验证 `stock CPython 3.14.0 @ ebf955df7a8 + JIT` 构建链路
-- 四轮真实优化结果已拆分到独立的 `mdp` 优化报告
+- 已完成前三轮正式优化与第四轮负优化实验复盘
 
 当前尚未完成：
 
 - 下一轮优化点的系统性挖掘与正式复核
+- `Battle.getSuccessors` 命中路径与 miss 路径的进一步拆分优化
 
-当前第三轮与第四轮的结论已经明确：
+当前前三轮与第四轮的结论已经明确：
 
 - HIR 形状改善：`BinaryOp 6 -> 4`，`GuardType 5 -> 3`
 - 热点白名单本地近似：相对前两轮仅约 `0.25%` 边际改善
-- `Battle.getSuccessors` 的中期整函数 helper 路径已经跑通
-- `Battle.getSuccessors` 的 `UnhandledException` deopt 已从 `14463 -> 0`
-- 在“前三轮开关”基础上加入第四轮后，本地近似 `median_wall_sec` 从 `6.005080s -> 5.745508s`，再提升约 `4.32%`
+- `Battle.getSuccessors` 的中期整函数 helper 路径已经作为实验实现过
+- 该实验在本地近似与容器口径下出现过正向信号，但真实环境结果从第三轮 `1.04s` 回退到第四轮 `1.05s`
 
 结论：
 
 - 第三轮更像“结构上更合理，但性能收益不大”的实验
-- 第四轮说明 `Battle.getSuccessors` 的异常控制流热点确实值得打，而且需要中等粒度的 helper 才能形成可见收益
+- 第四轮说明 `Battle.getSuccessors` 的异常控制流热点确实值得打，但当前 whole-helper 方案会把命中路径拖重，不能纳入正式收益线
 
 围绕 `Battle.getSuccessors`，目前已经额外确认了一条短期路径与一条中期路径：
 
 - 短期路径：把 `self.successors[statep]` 的 miss 改写为窄 helper，并保持 `KeyError` 语义不变
 - 结果：HIR 能从 `BinaryOp<Subscript>` 改成 `CallStatic + CheckExc`，但 `UnhandledException` deopt 计数基本不变，只是从 `BinaryOp` 转移到 `CheckExc`
-- 中期路径：通过 `Battle.getSuccessors` 的整函数 helper 直接绕开 `KeyError` 控制流，已经验证能把 `BinaryOp<Subscript>` 改成 `CallStatic + CheckExc`，并消除该函数的头部 deopt
+- 中期路径：通过 `Battle.getSuccessors` 的整函数 helper 直接绕开 `KeyError` 控制流，虽然能把 `BinaryOp<Subscript>` 改成 `CallStatic + CheckExc` 并消除该函数的头部 deopt，但真实环境回退，当前已从主收益线回退
 
 ## 2. 环境与口径
 
@@ -83,31 +83,31 @@ docker exec cpython-baseline-test sh -lc 'BENCHMARK=mdp SAMPLES=5 WARMUP=1 /scri
 
 结果摘要：
 
-- `stock CPython 3.14.0 + JIT = 1.038002s`
-- `CinderX JIT = 1.113288s`
-- `CinderX JIT + mdp 四轮优化 = 1.035180s`
-- `speedup_cinderx = 0.9324x`
-- `speedup_cinderx_optimized = 1.0027x`
-- 当前 `CinderX JIT` 相对 `stock CPython JIT` 劣化约 `6.76%`
-- 四轮优化后的 `CinderX JIT` 相对 `stock CPython JIT` 领先约 `0.27%`
-- 四轮优化对当前 `CinderX JIT` 的正式收益约 `7.55%`
+- 真实环境基线：`stock CPython 3.14.0 + JIT = 1.04s`
+- 真实环境第三轮优化 commit：`1.04s`
+- 真实环境第四轮优化 commit：`1.05s`
+- 结论上，前三轮已经把 `CinderX JIT` 拉到与 `stock CPython JIT` 持平
+- 第四轮 whole-helper 方案在真实环境中没有延续本地/容器里的正向结果，反而约有 `0.96%` 的回退
 
 结论：
 
-- ARM Docker 正式结果已经确认四轮 `mdp` 优化是同向有效的
-- 当前 `CinderX JIT` 的 `mdp` 正式成绩已经从落后 `stock CPython JIT` 约 `6.76%`，收敛到略快约 `0.27%`
-- 这说明前四轮归因与实现路径是有效的，`applyHPChange`、`getCritDist` 与 `Battle.getSuccessors` 的异常控制流都属于真实主差距来源
+- 真实环境的优先级高于本地近似和容器结果，因此正式收益线当前只计入前三轮
+- `applyHPChange`、`getCritDist` 与 `Battle.getSuccessors` 的异常控制流都属于真实主差距来源
+- 但 `Battle.getSuccessors` 的当前 whole-helper 方案需要视为负优化实验，而不是正式收益点
 
 ### 3.3 关于容器中“optimized”一栏的说明
 
-当前容器脚本的 `ENABLE_OPTIMIZATION=1` 已经改为按 benchmark 分发运行时开关。对于 `mdp`，本轮正式复核实际启用了：
+在容器口径里，`ENABLE_OPTIMIZATION=1` 当前分发到 `mdp` 的运行时开关为：
 
 - `PYTHONJIT_ARM_MDP_INT_CLAMP_MIN_MAX=1`
 - `PYTHONJIT_ARM_MDP_FRACTION_MIN_COMPARE=1`
 - `PYTHONJIT_ARM_MDP_PRIORITY_COMPARE_ADD=1`
-- `PYTHONJIT_ARM_MDP_GET_SUCCESSORS_WHOLE_HELPER=1`
 
-因此本节中的 `CinderX Result (optimized)` 已经是 `mdp` 的正式优化结果，而不是无关 benchmark 的旁路环境变量。
+说明：
+
+- 第四轮 whole-helper 曾经接入过容器的 `optimized` 路径，并在该口径下表现为正向
+- 但真实环境结果已经证明这条路径不能计入正式收益
+- 因此主线容器脚本也已回退到只包含前三轮开关
 
 ## 4. 本地近似基线
 
@@ -405,7 +405,7 @@ fun bm_mdp:getCritDist {
 - [第一轮：applyHPChange 整数 clamp 路径](/Users/luchen/Agents-Repo/Codex/cinderx/docs/superpowers/mdp/reports/2026-03-19-mdp-applyhpchange-optimization-report.md)
 - [第二轮：getCritDist 的 Fraction min 路径](/Users/luchen/Agents-Repo/Codex/cinderx/docs/superpowers/mdp/reports/2026-03-19-mdp-getcritdist-optimization-report.md)
 - [第三轮：_getSuccessorsB 的 priority compare-add 路径](/Users/luchen/Agents-Repo/Codex/cinderx/docs/superpowers/mdp/reports/2026-03-19-mdp-getsuccessorsb-optimization-report.md)
-- [第四轮：Battle.getSuccessors 的 whole-helper 路径](/Users/luchen/Agents-Repo/Codex/cinderx/docs/superpowers/mdp/reports/2026-03-19-mdp-getsuccessors-whole-helper-optimization-report.md)
+- 第四轮 `Battle.getSuccessors` whole-helper 路径已降级为负优化实验，结论保留在本报告中，不再作为主线独立收益报告维护
 
 ## 10. 当前优先级排序
 
@@ -455,8 +455,8 @@ fun bm_mdp:getCritDist {
 
 下一阶段要完成的事情：
 
-1. 保留 `applyHPChange`、`getCritDist` 与 `Battle.getSuccessors` 这三条已验证主线，并决定第四轮 whole-helper 是否继续打磨为默认路径
+1. 保留 `applyHPChange` 与 `getCritDist` 这两条已验证正式收益主线，并将第三轮 `_getSuccessorsB` 保持为次优先低收益项
 2. 将 `_getSuccessorsB` 的第三轮实验保留为“局部形状变轻但总收益较小”的次优先项
 3. 将 `Battle.getSuccessors` 的短期 helper 路径定性为“形状改善但不足以消除 deopt”，避免继续在同一路线上投入
-4. 在第四轮 whole-helper 的基础上继续评估更深一层的收益空间：是否还需要 `try/except KeyError` lowering，或进一步压低 helper 内部调用开销
-5. 复跑 ARM Docker 正式对照，确认前四轮优化是否缩小 `11.52%` 的当前差距
+4. 将第四轮 `Battle.getSuccessors` whole-helper 明确定性为“真实环境负优化”，主线保持回退，只在实验线继续深挖
+5. 围绕 `Battle.getSuccessors` 重新设计只优化 miss 路径、尽量不增加 hit 固定成本的新方案，例如更细粒度的 `KeyError` lowering 或更窄的 miss helper

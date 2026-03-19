@@ -224,18 +224,6 @@ PyObject* JITRT_ComprehensionsDictGetHelper(PyObject* dict, PyObject* key);
 PyObject* JITRT_ComprehensionsListSortHelper(PyObject* list_obj);
 
 /*
- * Whole-function helper for bm_mdp.Battle.getSuccessors(self, statep).
- *
- * Returns the cached result on hit. On miss, computes the same final result as
- * the Python implementation, writes it back into self.successors, and returns
- * it without surfacing KeyError to the caller.
- */
-PyObject* JITRT_MdpGetSuccessorsWholeHelper(
-    PyObject* self,
-    PyObject* successors,
-    PyObject* statep);
-
-/*
  * Helper to perform a Python call with dynamically determined arguments.
  *
  * pargs will be a possibly empty tuple of positional arguments, kwargs will be
