@@ -369,7 +369,6 @@ bool Instr::isReplayable() const {
     case Opcode::kCheckVar:
     case Opcode::kCheckedIntBinaryOp:
     case Opcode::kCIntToCBool:
-    case Opcode::kDoubleAbs:
     case Opcode::kDoubleBinaryOp:
     case Opcode::kDoubleSqrt:
     case Opcode::kFloatCompare:
@@ -403,8 +402,6 @@ bool Instr::isReplayable() const {
     case Opcode::kLoadTupleItem:
     case Opcode::kLoadTypeAttrCacheEntryType:
     case Opcode::kLoadTypeAttrCacheEntryValue:
-    case Opcode::kLoadMethodCacheEntryType:
-    case Opcode::kLoadMethodCacheEntryValue:
     case Opcode::kLoadTypeMethodCacheEntryType:
     case Opcode::kLoadTypeMethodCacheEntryValue:
     case Opcode::kLoadVarObjectSize:
@@ -459,7 +456,6 @@ bool Instr::isReplayable() const {
     case Opcode::kEagerImportName:
     case Opcode::kEndInlinedFunction:
     case Opcode::kFillTypeAttrCache:
-    case Opcode::kFillMethodCache:
     case Opcode::kFillTypeMethodCache:
     case Opcode::kFloatBinaryOp:
     case Opcode::kGetAIter:
@@ -532,6 +528,7 @@ bool Instr::isReplayable() const {
     case Opcode::kWaitHandleRelease:
     case Opcode::kYieldAndYieldFrom:
     case Opcode::kYieldFrom:
+    case Opcode::kOptimizedYieldFrom:
     case Opcode::kYieldFromHandleStopAsyncIteration:
     case Opcode::kYieldValue:
     case Opcode::kXDecref:
@@ -677,10 +674,8 @@ bool isAnyLoadMethod(const Instr& instr) {
   const Instr* arg2 = instr.GetOperand(1)->instr();
   return (arg1->IsLoadTypeMethodCacheEntryValue() &&
           arg2->IsFillTypeMethodCache()) ||
-      (arg1->IsLoadMethodCacheEntryValue() && arg2->IsFillMethodCache()) ||
       (arg2->IsLoadTypeMethodCacheEntryValue() &&
-       arg1->IsFillTypeMethodCache()) ||
-      (arg2->IsLoadMethodCacheEntryValue() && arg1->IsFillMethodCache());
+       arg1->IsFillTypeMethodCache());
 }
 
 bool isPassthrough(const Instr& instr) {
@@ -726,13 +721,11 @@ bool isPassthrough(const Instr& instr) {
     case Opcode::kDictMerge:
     case Opcode::kDictSubscr:
     case Opcode::kDictUpdate:
-    case Opcode::kDoubleAbs:
     case Opcode::kDoubleBinaryOp:
     case Opcode::kDoubleSqrt:
     case Opcode::kEagerImportName:
     case Opcode::kFillTypeAttrCache:
     case Opcode::kFillTypeMethodCache:
-    case Opcode::kFillMethodCache:
     case Opcode::kFloatBinaryOp:
     case Opcode::kFloatCompare:
     case Opcode::kFormatValue:
@@ -787,9 +780,7 @@ bool isPassthrough(const Instr& instr) {
     case Opcode::kLoadTypeAttrCacheEntryType:
     case Opcode::kLoadTypeAttrCacheEntryValue:
     case Opcode::kLoadTypeMethodCacheEntryType:
-    case Opcode::kLoadMethodCacheEntryType:
     case Opcode::kLoadTypeMethodCacheEntryValue:
-    case Opcode::kLoadMethodCacheEntryValue:
     case Opcode::kLoadVarObjectSize:
     case Opcode::kLongBinaryOp:
     case Opcode::kLongInPlaceOp:
@@ -836,6 +827,7 @@ bool isPassthrough(const Instr& instr) {
     case Opcode::kWaitHandleLoadWaiter:
     case Opcode::kYieldAndYieldFrom:
     case Opcode::kYieldFrom:
+    case Opcode::kOptimizedYieldFrom:
     case Opcode::kYieldFromHandleStopAsyncIteration:
     case Opcode::kYieldValue:
       return false;

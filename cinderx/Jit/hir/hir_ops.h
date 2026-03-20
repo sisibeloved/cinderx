@@ -51,12 +51,10 @@ namespace jit::hir {
   V(DictMerge)                         \
   V(DictSubscr)                        \
   V(DictUpdate)                        \
-  V(DoubleAbs)                         \
   V(DoubleBinaryOp)                    \
   V(DoubleSqrt)                        \
   V(EagerImportName)                   \
   V(EndInlinedFunction)                \
-  V(FillMethodCache)                   \
   V(FillTypeAttrCache)                 \
   V(FillTypeMethodCache)               \
   V(FloatBinaryOp)                     \
@@ -117,8 +115,6 @@ namespace jit::hir {
   V(LoadGlobal)                        \
   V(LoadMethod)                        \
   V(LoadMethodCached)                  \
-  V(LoadMethodCacheEntryType)          \
-  V(LoadMethodCacheEntryValue)         \
   V(LoadModuleAttrCached)              \
   V(LoadModuleMethodCached)            \
   V(LoadMethodSuper)                   \
@@ -187,7 +183,8 @@ namespace jit::hir {
   V(YieldAndYieldFrom)                 \
   V(YieldFrom)                         \
   V(YieldFromHandleStopAsyncIteration) \
-  V(YieldValue)
+  V(YieldValue)                        \
+  V(OptimizedYieldFrom)
 
 enum class Opcode {
 #define DECLARE_OP(opname) k##opname,

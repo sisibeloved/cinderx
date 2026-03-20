@@ -214,9 +214,6 @@ LIRGenerator::LIRGenerator(
     const jit::hir::Function* func,
     jit::codegen::Environ* env)
     : func_(func), env_(env) {
-  for (int i = 0, n = func->env.numLoadMethodCaches(); i < n; i++) {
-    load_method_caches_.emplace_back(getContext()->allocateLoadMethodCache());
-  }
   for (int i = 0, n = func->env.numLoadTypeAttrCaches(); i < n; i++) {
     load_type_attr_caches_.emplace_back(
         getContext()->allocateLoadTypeAttrCache());
@@ -389,22 +386,6 @@ bool LIRGenerator::TranslateSpecializedCall(
   // will not have their vectorcall entry points modified by the JIT, so it
   // always makes sense to load them at JIT-time and burn them directly into
   // code.
-  if (type == &PyMethodDescr_Type) {
-    auto* method = reinterpret_cast<PyMethodDescrObject*>(callee);
-    if ((hir_instr.flags() & CallFlags::Static) &&
-        method->d_method->ml_flags == METH_FASTCALL &&
-        hir_instr.numArgs() == 2) {
-      bbb.appendCallInstruction(
-          hir_instr.output(),
-          JITRT_CallMethodDescrFast1,
-          hir_instr.func(),
-          hir_instr.arg(0),
-          hir_instr.arg(1));
-      return true;
-    }
-    return false;
-  }
-
   if (type != &PyCFunction_Type) {
     return false;
   }
@@ -1000,11 +981,6 @@ LIRGenerator::TranslatedBlock LIRGenerator::TranslateOneBasicBlock(
         bbb.appendInstr(instr->output(), Instruction::kFsqrt, instr->GetOperand(0));
         break;
       }
-      case Opcode::kDoubleAbs: {
-        auto instr = static_cast<const DoubleAbs*>(&i);
-        bbb.appendInstr(instr->output(), Instruction::kFabs, instr->GetOperand(0));
-        break;
-      }
       case Opcode::kPrimitiveCompare: {
         auto instr = static_cast<const PrimitiveCompare*>(&i);
         Instruction::Opcode op;
@@ -1287,18 +1263,29 @@ LIRGenerator::TranslatedBlock LIRGenerator::TranslateOneBasicBlock(
       }
       case Opcode::kYieldAndYieldFrom:
       case Opcode::kYieldFrom:
+      case Opcode::kOptimizedYieldFrom:
       case Opcode::kYieldFromHandleStopAsyncIteration: {
         Instruction::Opcode op = [&] {
           if (opcode == Opcode::kYieldAndYieldFrom) {
             return Instruction::kYieldFromSkipInitialSend;
+          } else if (opcode == Opcode::kOptimizedYieldFrom) {
+            return Instruction::kOptimizedYieldFrom;
           } else if (opcode == Opcode::kYieldFrom) {
             return Instruction::kYieldFrom;
           } else {
             return Instruction::kYieldFromHandleStopAsyncIteration;
           }
         }();
-        Instruction* instr = bbb.appendInstr(
-            i.output(), op, env_->asm_tstate, i.GetOperand(0), i.GetOperand(1));
+        Instruction* instr = [&] {
+          if (opcode == Opcode::kOptimizedYieldFrom) {
+            // OptimizedYieldFrom has 3 operands: send_value, iter, entry
+            return bbb.appendInstr(
+                i.output(), op, env_->asm_tstate, i.GetOperand(0),
+                i.GetOperand(1), i.GetOperand(2));
+          }
+          return bbb.appendInstr(
+              i.output(), op, env_->asm_tstate, i.GetOperand(0), i.GetOperand(1));
+        }();
         finishYield(bbb, instr, static_cast<const DeoptBase*>(&i));
         break;
       }
@@ -1456,27 +1443,6 @@ LIRGenerator::TranslatedBlock LIRGenerator::TranslateOneBasicBlock(
             name);
         break;
       }
-      case Opcode::kFillMethodCache: {
-        JIT_DCHECK(
-            getConfig().attr_caches,
-            "Inline caches must be enabled to use FillMethodCache");
-        auto instr = static_cast<const FillMethodCache*>(&i);
-        Instruction* name = getNameFromIdx(bbb, instr);
-        auto cache_entry = load_method_caches_.at(instr->cache_id());
-        if (getConfig().collect_attr_cache_stats) {
-          BorrowedRef<PyCodeObject> code = instr->frameState()->code;
-          cache_entry->initCacheStats(
-              PyUnicode_AsUTF8(code->co_filename),
-              PyUnicode_AsUTF8(code->co_name));
-        }
-        bbb.appendCallInstruction(
-            instr->output(),
-            LoadMethodCache::lookupHelper,
-            cache_entry,
-            instr->receiver(),
-            name);
-        break;
-      }
       case Opcode::kLoadTypeMethodCacheEntryType: {
         JIT_DCHECK(
             getConfig().attr_caches,
@@ -1500,28 +1466,6 @@ LIRGenerator::TranslatedBlock LIRGenerator::TranslateOneBasicBlock(
         bbb.appendCallInstruction(
             instr->output(),
             LoadTypeMethodCache::getValueHelper,
-            cache,
-            instr->receiver());
-        break;
-      }
-      case Opcode::kLoadMethodCacheEntryType: {
-        JIT_DCHECK(
-            getConfig().attr_caches,
-            "Inline caches must be enabled to use LoadMethodCacheEntryType");
-        auto instr = static_cast<const LoadMethodCacheEntryType*>(&i);
-        LoadMethodCache* cache = load_method_caches_.at(instr->cache_id());
-        bbb.appendInstr(instr->output(), Instruction::kMove, MemImm{cache->typeAddr()});
-        break;
-      }
-      case Opcode::kLoadMethodCacheEntryValue: {
-        JIT_DCHECK(
-            getConfig().attr_caches,
-            "Inline caches must be enabled to use LoadMethodCacheEntryValue");
-        auto instr = static_cast<const LoadMethodCacheEntryValue*>(&i);
-        LoadMethodCache* cache = load_method_caches_.at(instr->cache_id());
-        bbb.appendCallInstruction(
-            instr->output(),
-            LoadMethodCache::getValueHelper,
             cache,
             instr->receiver());
         break;
@@ -2292,7 +2236,7 @@ LIRGenerator::TranslatedBlock LIRGenerator::TranslateOneBasicBlock(
             hir_instr.output(),
             Instruction::kVectorCall,
             // TASK(T140174965): This should be MemImm.
-            Imm{reinterpret_cast<uint64_t>(JITRT_CallMethod)},
+            Imm{reinterpret_cast<uint64_t>(JITRT_Call)},
             Imm{flags});
         for (hir::Register* arg : hir_instr.GetOperands()) {
           instr->addOperands(VReg{bbb.getDefInstr(arg)});

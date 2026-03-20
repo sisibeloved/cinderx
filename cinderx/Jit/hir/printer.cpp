@@ -307,6 +307,7 @@ static std::string format_immediates(const Function* func, const Instr& instr) {
     case Opcode::kXIncref:
     case Opcode::kYieldAndYieldFrom:
     case Opcode::kYieldFrom:
+    case Opcode::kOptimizedYieldFrom:
     case Opcode::kYieldFromHandleStopAsyncIteration:
     case Opcode::kUnicodeConcat:
     case Opcode::kUnicodeRepeat:
@@ -517,7 +518,6 @@ static std::string format_immediates(const Function* func, const Instr& instr) {
       const auto& bin_op = static_cast<const DoubleBinaryOp&>(instr);
       return std::string{GetBinaryOpName(bin_op.op())};
     }
-    case Opcode::kDoubleAbs:
     case Opcode::kDoubleSqrt:
       return "";
     case Opcode::kLoadArg: {
@@ -676,25 +676,13 @@ static std::string format_immediates(const Function* func, const Instr& instr) {
       const auto& i = static_cast<const LoadTypeMethodCacheEntryValue&>(instr);
       return fmt::format("{}", i.cache_id());
     }
-    case Opcode::kLoadMethodCacheEntryValue: {
-      const auto& i = static_cast<const LoadMethodCacheEntryValue&>(instr);
-      return fmt::format("{}", i.cache_id());
-    }
     case Opcode::kLoadTypeMethodCacheEntryType: {
       const auto& i = static_cast<const LoadTypeMethodCacheEntryType&>(instr);
-      return fmt::format("{}", i.cache_id());
-    }
-    case Opcode::kLoadMethodCacheEntryType: {
-      const auto& i = static_cast<const LoadMethodCacheEntryType&>(instr);
       return fmt::format("{}", i.cache_id());
     }
     case Opcode::kFillTypeMethodCache: {
       const auto& ftmc = static_cast<const FillTypeMethodCache&>(instr);
       return fmt::format("{}, {}", ftmc.cache_id(), ftmc.name_idx());
-    }
-    case Opcode::kFillMethodCache: {
-      const auto& fmc = static_cast<const FillMethodCache&>(instr);
-      return fmt::format("{}, {}", fmc.cache_id(), fmc.name_idx());
     }
     case Opcode::kSetFunctionAttr: {
       const auto& set_fn_attr = static_cast<const SetFunctionAttr&>(instr);

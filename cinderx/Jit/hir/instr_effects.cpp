@@ -39,7 +39,6 @@ MemoryEffects memoryEffects(const Instr& inst) {
     case Opcode::kCIntToCBool:
     case Opcode::kDeopt:
     case Opcode::kDeoptPatchpoint:
-    case Opcode::kDoubleAbs:
     case Opcode::kDoubleBinaryOp:
     case Opcode::kDoubleSqrt:
     case Opcode::kLongUnboxCompact:
@@ -128,7 +127,6 @@ MemoryEffects memoryEffects(const Instr& inst) {
     case Opcode::kDictUpdate:
     case Opcode::kDictSubscr:
     case Opcode::kEagerImportName:
-    case Opcode::kFillMethodCache:
     case Opcode::kFillTypeAttrCache:
     case Opcode::kFillTypeMethodCache:
     case Opcode::kFloatBinaryOp:
@@ -293,11 +291,7 @@ MemoryEffects memoryEffects(const Instr& inst) {
       // produce borrowed reference here to be consistent with
       // GetLoadMethodInstance's memory effects for simplicity
       return commonEffects(inst, AEmpty);
-    case Opcode::kLoadMethodCacheEntryValue:
-      return commonEffects(inst, AEmpty);
     case Opcode::kLoadTypeMethodCacheEntryType:
-      return borrowFrom(inst, ATypeMethodCache);
-    case Opcode::kLoadMethodCacheEntryType:
       return borrowFrom(inst, ATypeMethodCache);
 
     case Opcode::kReturn:
@@ -330,6 +324,13 @@ MemoryEffects memoryEffects(const Instr& inst) {
       return {true, AFuncArgs, {2, 1}, AAny};
 #else
       [[fallthrough]];
+#endif
+    case Opcode::kOptimizedYieldFrom:
+      // 与 YieldFrom 相同的内存效果
+#if PY_VERSION_HEX >= 0x030C0000
+      return {true, AFuncArgs, {3, 1}, AAny};
+#else
+      return commonEffects(inst, AAny);
 #endif
     case Opcode::kYieldFromHandleStopAsyncIteration: {
       // In 3.10 YieldFrom's output is either the yielded value from the subiter
@@ -404,7 +405,6 @@ bool hasArbitraryExecution(const Instr& inst) {
     case Opcode::kCondBranchCheckType:
     case Opcode::kCondBranchIterNotDone:
     case Opcode::kDeoptPatchpoint:
-    case Opcode::kDoubleAbs:
     case Opcode::kDoubleBinaryOp:
     case Opcode::kDoubleSqrt:
     case Opcode::kEndInlinedFunction:
@@ -439,8 +439,6 @@ bool hasArbitraryExecution(const Instr& inst) {
     case Opcode::kLoadTypeAttrCacheEntryValue:
     case Opcode::kLoadTypeMethodCacheEntryType:
     case Opcode::kLoadTypeMethodCacheEntryValue:
-    case Opcode::kLoadMethodCacheEntryType:
-    case Opcode::kLoadMethodCacheEntryValue:
     case Opcode::kLoadVarObjectSize:
     case Opcode::kLongCompare:
     case Opcode::kMakeCell:
@@ -503,7 +501,6 @@ bool hasArbitraryExecution(const Instr& inst) {
     case Opcode::kEagerImportName:
     case Opcode::kFillTypeAttrCache:
     case Opcode::kFillTypeMethodCache:
-    case Opcode::kFillMethodCache:
     case Opcode::kFloatBinaryOp:
     case Opcode::kFormatValue:
     case Opcode::kFormatWithSpec:
@@ -553,6 +550,7 @@ bool hasArbitraryExecution(const Instr& inst) {
     case Opcode::kXDecref:
     case Opcode::kYieldAndYieldFrom:
     case Opcode::kYieldFrom:
+    case Opcode::kOptimizedYieldFrom:
     case Opcode::kYieldFromHandleStopAsyncIteration:
     case Opcode::kYieldValue:
       return true;

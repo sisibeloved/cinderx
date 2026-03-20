@@ -820,7 +820,6 @@ enum class CallFlags : uint32_t {
   KwArgs = 1 << 0,
   Awaited = 1 << 1,
   Static = 1 << 2,
-  NoSpecialize = 1 << 3,
 };
 
 constexpr uint32_t raw(CallFlags flags) {
@@ -1567,7 +1566,6 @@ class INSTR_CLASS(
   BinaryOpKind op_;
 };
 
-DEFINE_SIMPLE_INSTR(DoubleAbs, (TCDouble), HasOutput, Operands<1>);
 DEFINE_SIMPLE_INSTR(DoubleSqrt, (TCDouble), HasOutput, Operands<1>);
 
 class InlineBase {
@@ -2670,64 +2668,11 @@ class INSTR_CLASS(
   int cache_id_;
 };
 
-// Perform a full method lookup. Fill the cache if the receiver does not match
-// the cached exact receiver type.
-class INSTR_CLASS(
-    FillMethodCache,
-    (TObject),
-    HasOutput,
-    Operands<1>,
-    DeoptBaseWithNameIdx) {
- public:
-  FillMethodCache(
-      Register* dst,
-      Register* receiver,
-      int name_idx,
-      int cache_id,
-      const FrameState& frame)
-      : InstrT(dst, receiver, name_idx, frame), cache_id_(cache_id) {}
-  FillMethodCache(
-      Register* dst,
-      Register* receiver,
-      int name_idx,
-      int cache_id,
-      std::unique_ptr<FrameState> frame)
-      : InstrT(dst, receiver, name_idx), cache_id_(cache_id) {
-    setFrameState(std::move(frame));
-  }
-
-  Register* receiver() const {
-    return reg();
-  }
-
-  int cache_id() const {
-    return cache_id_;
-  }
-
- private:
-  int cache_id_;
-};
-
 // Load the type from a cache specialized for loading methods from type
 // receivers
 class INSTR_CLASS(LoadTypeMethodCacheEntryType, (), HasOutput, Operands<0>) {
  public:
   LoadTypeMethodCacheEntryType(Register* dst, int cache_id)
-      : InstrT(dst), cache_id_(cache_id) {}
-
-  int cache_id() const {
-    return cache_id_;
-  }
-
- private:
-  int cache_id_;
-};
-
-// Load the cached receiver type from a cache specialized for loading methods
-// from exact instance receivers.
-class INSTR_CLASS(LoadMethodCacheEntryType, (), HasOutput, Operands<0>) {
- public:
-  LoadMethodCacheEntryType(Register* dst, int cache_id)
       : InstrT(dst), cache_id_(cache_id) {}
 
   int cache_id() const {
@@ -2754,29 +2699,6 @@ class INSTR_CLASS(
   }
 
   // The type object we're loading the method from
-  Register* receiver() const {
-    return reg();
-  }
-
- private:
-  int cache_id_;
-};
-
-// Load the cached callable from a cache specialized for loading methods from
-// exact instance receivers. The second output remains the receiver object.
-class INSTR_CLASS(
-    LoadMethodCacheEntryValue,
-    (TObject),
-    HasOutput,
-    Operands<1>) {
- public:
-  LoadMethodCacheEntryValue(Register* dst, int cache_id, Register* receiver)
-      : InstrT(dst, receiver), cache_id_(cache_id) {}
-
-  int cache_id() const {
-    return cache_id_;
-  }
-
   Register* receiver() const {
     return reg();
   }
@@ -3730,6 +3652,16 @@ DEFINE_SIMPLE_INSTR(
     Operands<2>,
     DeoptBase);
 
+// OptimizedYieldFrom: 自引用委托优化指令
+// 绕过 JITRT_GenSend，直接调用子生成器入口点
+// 操作数: send_value, iter, target_entry
+DEFINE_SIMPLE_INSTR(
+    OptimizedYieldFrom,
+    (TObject, TOptObject),
+    HasOutput,
+    Operands<3>,
+    DeoptBase);
+
 // A more compact (in terms of emitted code) equivalent to YieldValue followed
 // by YieldFrom.
 DEFINE_SIMPLE_INSTR(
@@ -4173,14 +4105,6 @@ class Environment {
     return next_load_type_method_cache_;
   }
 
-  int allocateLoadMethodCache() {
-    return next_load_method_cache_++;
-  }
-
-  int numLoadMethodCaches() const {
-    return next_load_method_cache_;
-  }
-
  private:
   DISALLOW_COPY_AND_ASSIGN(Environment);
 
@@ -4189,7 +4113,6 @@ class Environment {
   int next_register_id_{0};
   int next_load_type_attr_cache_{0};
   int next_load_type_method_cache_{0};
-  int next_load_method_cache_{0};
 };
 
 constexpr unsigned long kThreadSafeFlagsMask = Py_TPFLAGS_BASETYPE;
