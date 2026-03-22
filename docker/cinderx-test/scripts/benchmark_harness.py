@@ -32,6 +32,13 @@ BENCHMARK_SPECS: dict[str, BenchmarkSpec] = {
         bench_args=(1,),
         benchmark_url="https://raw.githubusercontent.com/python/pyperformance/main/pyperformance/data-files/benchmarks/bm_mdp/run_benchmark.py",
     ),
+    "regex_compile": BenchmarkSpec(
+        name="regex_compile",
+        module_dir="bm_regex_compile",
+        bench_func="bench_regex_compile",
+        bench_args=(1,),
+        benchmark_url="https://raw.githubusercontent.com/python/pyperformance/main/pyperformance/data-files/benchmarks/bm_regex_compile/run_benchmark.py",
+    ),
 }
 
 
@@ -58,6 +65,16 @@ def benchmark_module_dir(root: Path | str, name: str) -> Path:
 def load_benchmark(root: Path | str, name: str):
     spec = resolve_benchmark(name)
     module_path = benchmark_module_path(root, name)
+
+    # Prepend sub-benchmark paths for regex_compile so capture_regexes() can import them.
+    extra_path_entries: list[str] = []
+    if name == "regex_compile":
+        effbot_path = str(Path(root) / "bm_regex_effbot")
+        v8_path = str(Path(root) / "bm_regex_v8")
+        extra_path_entries = [effbot_path, v8_path]
+        for p in reversed(extra_path_entries):
+            sys.path.insert(0, p)
+
     import_spec = importlib.util.spec_from_file_location(spec.module_dir, module_path)
     if import_spec is None or import_spec.loader is None:
         raise RuntimeError(f"failed to load benchmark module from {module_path}")
@@ -70,7 +87,20 @@ def load_benchmark(root: Path | str, name: str):
             sys.path.remove(str(module_path.parent))
         except ValueError:
             pass
+        for p in extra_path_entries:
+            try:
+                sys.path.remove(p)
+            except ValueError:
+                pass
     bench = getattr(module, spec.bench_func)
+
+    if name == "regex_compile":
+        captured_regexes = module.capture_regexes()
+        original_bench = bench
+
+        def bench(*args):
+            return original_bench(*args, captured_regexes)
+
     return module, bench
 
 

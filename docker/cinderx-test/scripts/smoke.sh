@@ -46,5 +46,21 @@ try:
 except Exception as e:
     print(f"⚠ Tree.__iter__ test skipped: {e}")
 
+# Test 4: regex_compile compilation
+print("\nTest 4: regex_compile compilation")
+try:
+    import sys
+    sys.path.insert(0, "/scripts")
+    from benchmark_harness import load_benchmark
+
+    module, bench = load_benchmark("/root/benchmarks", "regex_compile")
+    result = jit.force_compile(module.bench_regex_compile)
+    if result:
+        print(f"✓ bench_regex_compile compiled: {jit.get_compiled_size(module.bench_regex_compile)} bytes")
+    else:
+        print("⚠ bench_regex_compile not compiled (expected on non-ARM or with limited JIT)")
+except Exception as e:
+    print(f"⚠ regex_compile test skipped: {e}")
+
 print("\n=== All smoke tests passed ===")
 PY

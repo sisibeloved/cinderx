@@ -30,6 +30,28 @@ print(f"Downloading {spec.benchmark_url}...")
 urllib.request.urlretrieve(spec.benchmark_url, output_path)
 print(f"✓ Saved to {output_path}")
 
+def resolve_dependent_benchmarks(benchmark_name):
+    """Download sub-benchmarks required by the given benchmark."""
+    if benchmark_name != "regex_compile":
+        return
+    sub_benchmarks = {
+        "bm_regex_effbot": "https://raw.githubusercontent.com/python/pyperformance/main/pyperformance/data-files/benchmarks/bm_regex_effbot/run_benchmark.py",
+        "bm_regex_v8": "https://raw.githubusercontent.com/python/pyperformance/main/pyperformance/data-files/benchmarks/bm_regex_v8/run_benchmark.py",
+    }
+    root = pathlib.Path("/root/benchmarks")
+    for sub_name, url in sub_benchmarks.items():
+        sub_path = root / sub_name / "run_benchmark.py"
+        sub_path.parent.mkdir(parents=True, exist_ok=True)
+        print(f"Downloading {url}...")
+        urllib.request.urlretrieve(url, sub_path)
+        print(f"✓ Saved to {sub_path}")
+        # Create local pyperf shim
+        shim_path = sub_path.parent / "pyperf.py"
+        shim_path.write_text(pyperf_shim_code(), encoding="utf-8")
+        print(f"✓ Created pyperf shim at {shim_path}")
+
+resolve_dependent_benchmarks(benchmark)
+
 pyperf_path = pathlib.Path("/root/benchmarks/pyperf.py")
 pyperf_path.write_text(pyperf_shim_code(), encoding="utf-8")
 print(f"✓ Created pyperf shim at {pyperf_path}")

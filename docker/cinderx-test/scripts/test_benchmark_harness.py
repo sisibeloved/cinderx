@@ -29,6 +29,12 @@ class BenchmarkHarnessTests(unittest.TestCase):
         self.assertEqual(spec.module_dir, "bm_mdp")
         self.assertEqual(spec.bench_func, "bench_mdp")
 
+    def test_resolve_regex_compile_benchmark(self) -> None:
+        harness = _load_harness()
+        spec = harness.resolve_benchmark("regex_compile")
+        self.assertEqual(spec.module_dir, "bm_regex_compile")
+        self.assertEqual(spec.bench_func, "bench_regex_compile")
+
     def test_load_benchmark_accepts_string_root(self) -> None:
         harness = _load_harness()
         with tempfile.TemporaryDirectory() as tmp:
@@ -76,6 +82,13 @@ class BenchmarkHarnessTests(unittest.TestCase):
         self.assertEqual(
             harness.default_opt_env_file("mdp"),
             pathlib.Path("/scripts/configs/mdp/stable.env"),
+        )
+
+    def test_default_opt_env_file_regex_compile(self) -> None:
+        harness = _load_harness()
+        self.assertEqual(
+            harness.default_opt_env_file("regex_compile"),
+            pathlib.Path("/scripts/configs/regex_compile/stable.env"),
         )
 
     def test_comparison_results_path_nests_by_benchmark_and_config(self) -> None:
