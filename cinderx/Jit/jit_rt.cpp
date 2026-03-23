@@ -203,7 +203,7 @@ static int JITRT_BindKeywordArgs(
   return 1;
 }
 
-PyObject* JITRT_CallInterpretedVectorcall(
+JIT_RUNTIME_API PyObject* JITRT_CallInterpretedVectorcall(
     PyObject* func_obj,
     PyObject* const* stack,
     size_t nargsf,
@@ -225,7 +225,7 @@ PyObject* JITRT_CallInterpretedVectorcall(
 // Rather than copying over all of the error reporting we instead
 // just dispatch to the normal _PyFunction_Vectorcall if anything
 // goes wrong which is indicated by JITRT_BindKeywordArgs returning 0.
-PyObject* JITRT_CallWithKeywordArgs(
+JIT_RUNTIME_API PyObject* JITRT_CallWithKeywordArgs(
     PyFunctionObject* func,
     PyObject** args,
     size_t nargsf,
@@ -269,7 +269,7 @@ using staticvectorcallfuncfp = JITRT_StaticCallFPReturn (*)(
     size_t nargsf,
     PyObject* kwnames);
 
-JITRT_StaticCallFPReturn JITRT_CallWithIncorrectArgcountFPReturn(
+JIT_RUNTIME_API JITRT_StaticCallFPReturn JITRT_CallWithIncorrectArgcountFPReturn(
     PyFunctionObject* func,
     PyObject** args,
     size_t nargsf,
@@ -319,7 +319,7 @@ JITRT_StaticCallFPReturn JITRT_CallWithIncorrectArgcountFPReturn(
       (PyObject*)defaulted_args);
 }
 
-JITRT_StaticCallReturn JITRT_CallWithIncorrectArgcount(
+JIT_RUNTIME_API JITRT_StaticCallReturn JITRT_CallWithIncorrectArgcount(
     PyFunctionObject* func,
     PyObject** args,
     size_t nargsf,
@@ -501,7 +501,7 @@ TRetType JITRT_CallStaticallyWithPrimitiveSignatureTemplate(
       TVectorcall>(func, args, nargsf, arg_info);
 }
 
-JITRT_StaticCallReturn JITRT_CallStaticallyWithPrimitiveSignature(
+JIT_RUNTIME_API JITRT_StaticCallReturn JITRT_CallStaticallyWithPrimitiveSignature(
     PyFunctionObject* func,
     PyObject** args,
     size_t nargsf,
@@ -512,7 +512,7 @@ JITRT_StaticCallReturn JITRT_CallStaticallyWithPrimitiveSignature(
       staticvectorcallfunc>(func, args, nargsf, kwnames, arg_info);
 }
 
-JITRT_StaticCallFPReturn JITRT_CallStaticallyWithPrimitiveSignatureFP(
+JIT_RUNTIME_API JITRT_StaticCallFPReturn JITRT_CallStaticallyWithPrimitiveSignatureFP(
     PyFunctionObject* func,
     PyObject** args,
     size_t nargsf,
@@ -523,7 +523,7 @@ JITRT_StaticCallFPReturn JITRT_CallStaticallyWithPrimitiveSignatureFP(
       staticvectorcallfuncfp>(func, args, nargsf, kwnames, arg_info);
 }
 
-JITRT_StaticCallFPReturn JITRT_ReportStaticArgTypecheckErrorsWithDoubleReturn(
+JIT_RUNTIME_API JITRT_StaticCallFPReturn JITRT_ReportStaticArgTypecheckErrorsWithDoubleReturn(
     PyObject* func,
     PyObject** args,
     size_t nargsf,
@@ -534,7 +534,7 @@ JITRT_StaticCallFPReturn JITRT_ReportStaticArgTypecheckErrorsWithDoubleReturn(
   return {0, 0};
 }
 
-JITRT_StaticCallReturn JITRT_ReportStaticArgTypecheckErrorsWithPrimitiveReturn(
+JIT_RUNTIME_API JITRT_StaticCallReturn JITRT_ReportStaticArgTypecheckErrorsWithPrimitiveReturn(
     PyObject* func,
     PyObject** args,
     size_t nargsf,
@@ -545,7 +545,7 @@ JITRT_StaticCallReturn JITRT_ReportStaticArgTypecheckErrorsWithPrimitiveReturn(
   return {nullptr, nullptr};
 }
 
-PyObject* JITRT_ReportStaticArgTypecheckErrors(
+JIT_RUNTIME_API PyObject* JITRT_ReportStaticArgTypecheckErrors(
     PyObject* func_obj,
     PyObject** args,
     size_t nargsf,
@@ -597,7 +597,7 @@ static PyFrameObject* allocateFrame(
   return _PyFrame_New_NoTrack(tstate, &frame_ctor, nullptr);
 }
 
-PyThreadState* JITRT_AllocateAndLinkFrame(
+JIT_RUNTIME_API PyThreadState* JITRT_AllocateAndLinkFrame(
     PyCodeObject* code,
     PyObject* builtins,
     PyObject* globals) {
@@ -672,7 +672,7 @@ static inline PyThreadState* allocate_and_link_interpreter_frame(
   return tstate;
 }
 
-PyThreadState* JITRT_AllocateAndLinkInterpreterFrame_Debug(
+JIT_RUNTIME_API PyThreadState* JITRT_AllocateAndLinkInterpreterFrame_Debug(
     PyFunctionObject* func,
     PyCodeObject* jit_code_object) {
   PyCodeObject* co = (PyCodeObject*)func->func_code;
@@ -682,13 +682,13 @@ PyThreadState* JITRT_AllocateAndLinkInterpreterFrame_Debug(
   return allocate_and_link_interpreter_frame(func, co);
 }
 
-PyThreadState* JITRT_AllocateAndLinkInterpreterFrame_Release(
+JIT_RUNTIME_API PyThreadState* JITRT_AllocateAndLinkInterpreterFrame_Release(
     PyFunctionObject* func) {
   PyCodeObject* co = (PyCodeObject*)func->func_code;
   return allocate_and_link_interpreter_frame(func, co);
 }
 
-void JITRT_InitFrameCellVars(
+JIT_RUNTIME_API void JITRT_InitFrameCellVars(
     PyFunctionObject* func,
     int nvars,
     PyThreadState* tstate) {
@@ -710,7 +710,7 @@ void JITRT_InitFrameCellVars(
 #endif
 }
 
-std::pair<PyThreadState*, jit::GenDataFooter*>
+JIT_RUNTIME_API std::pair<PyThreadState*, jit::GenDataFooter*>
 JITRT_AllocateAndLinkGenAndInterpreterFrame(
     PyFunctionObject* func,
     uint64_t spill_words,
@@ -791,7 +791,7 @@ JITRT_AllocateAndLinkGenAndInterpreterFrame(
   return {tstate, footer};
 }
 
-std::pair<jit::JitGenObject*, jit::GenDataFooter*>
+JIT_RUNTIME_API std::pair<jit::JitGenObject*, jit::GenDataFooter*>
 JITRT_UnlinkGenFrameAndReturnGenDataFooter(PyThreadState* tstate) {
   _PyInterpreterFrame* frame = currentFrame(tstate);
   setCurrentFrame(tstate, frame->previous);
@@ -805,7 +805,7 @@ JITRT_UnlinkGenFrameAndReturnGenDataFooter(PyThreadState* tstate) {
 
 #endif
 
-void JITRT_DecrefFrame(PyFrameObject* frame) {
+JIT_RUNTIME_API void JITRT_DecrefFrame(PyFrameObject* frame) {
   if (Py_REFCNT(frame) > 1) {
     // If the frame escaped it needs to be tracked
     Py_DECREF(frame);
@@ -817,16 +817,16 @@ void JITRT_DecrefFrame(PyFrameObject* frame) {
   }
 }
 
-void JITRT_Decref(PyObject* obj) {
+JIT_RUNTIME_API void JITRT_Decref(PyObject* obj) {
   Py_DECREF(obj);
 }
 
-void JITRT_XDecref(PyObject* obj) {
+JIT_RUNTIME_API void JITRT_XDecref(PyObject* obj) {
   Py_XDECREF(obj);
 }
 
 #if PY_VERSION_HEX < 0x030C0000
-void JITRT_UnlinkPyFrame(PyThreadState* tstate) {
+JIT_RUNTIME_API void JITRT_UnlinkPyFrame(PyThreadState* tstate) {
   PyFrameObject* f = tstate->frame;
 
   f->f_state = FRAME_RETURNED;
@@ -836,7 +836,7 @@ void JITRT_UnlinkPyFrame(PyThreadState* tstate) {
 }
 #endif
 
-void JITRT_UnlinkFrame([[maybe_unused]] bool unlink_shadow_frame) {
+JIT_RUNTIME_API void JITRT_UnlinkFrame([[maybe_unused]] bool unlink_shadow_frame) {
   PyThreadState* tstate = PyThreadState_GET();
 #if PY_VERSION_HEX < 0x030C0000
   _PyShadowFrame* frame = tstate->shadow_frame;
@@ -894,19 +894,19 @@ JITRT_LoadGlobal(PyObject* globals, PyObject* builtins, PyObject* name) {
   return result;
 }
 
-PyObject* JITRT_LoadGlobalFromThreadState(
+JIT_RUNTIME_API PyObject* JITRT_LoadGlobalFromThreadState(
     PyThreadState* tstate,
     PyObject* name) {
   jit::RuntimeFrameState rtfs = jit::runtimeFrameStateFromThreadState(tstate);
   return JITRT_LoadGlobal(rtfs.globals(), rtfs.builtins(), name);
 }
 
-PyObject* JITRT_LoadGlobalsDict(PyThreadState* tstate) {
+JIT_RUNTIME_API PyObject* JITRT_LoadGlobalsDict(PyThreadState* tstate) {
   jit::RuntimeFrameState rtfs = jit::runtimeFrameStateFromThreadState(tstate);
   return rtfs.globals();
 }
 
-PyObject* JITRT_ListSlice(PyObject* list, PyObject* start, PyObject* stop) {
+JIT_RUNTIME_API PyObject* JITRT_ListSlice(PyObject* list, PyObject* start, PyObject* stop) {
   JIT_DCHECK(PyList_CheckExact(list), "Expected exact list");
   JIT_DCHECK(
       start == Py_None || PyLong_CheckExact(start),
@@ -947,11 +947,11 @@ PyObject* get_dict_item_miss_sentinel() {
 
 } // namespace
 
-PyObject* JITRT_GetDictItemMissSentinel(void) {
+JIT_RUNTIME_API PyObject* JITRT_GetDictItemMissSentinel(void) {
   return get_dict_item_miss_sentinel();
 }
 
-PyObject* JITRT_GetDictItemOrSentinel(PyObject* dict, PyObject* key) {
+JIT_RUNTIME_API PyObject* JITRT_GetDictItemOrSentinel(PyObject* dict, PyObject* key) {
   JIT_DCHECK(PyDict_CheckExact(dict), "expected exact dict");
 
   PyObject* value = nullptr;
@@ -966,7 +966,7 @@ PyObject* JITRT_GetDictItemOrSentinel(PyObject* dict, PyObject* key) {
   return nullptr;
 }
 
-PyObject* JITRT_DeepcopyTuplePostMiss(PyObject* x, PyObject* y) {
+JIT_RUNTIME_API PyObject* JITRT_DeepcopyTuplePostMiss(PyObject* x, PyObject* y) {
   if (PyTuple_CheckExact(x) && PyList_CheckExact(y)) {
     Py_ssize_t size = PyTuple_GET_SIZE(x);
     if (PyList_GET_SIZE(y) == size) {
@@ -1013,7 +1013,7 @@ PyObject* JITRT_DeepcopyTuplePostMiss(PyObject* x, PyObject* y) {
 
 #endif
 
-PyObject* JITRT_LoadFunctionIndirect(PyObject** func, PyObject* descr) {
+JIT_RUNTIME_API PyObject* JITRT_LoadFunctionIndirect(PyObject** func, PyObject* descr) {
   PyObject* res = *func;
   if (!res) {
     res = _PyClassLoader_ResolveFunction(descr, nullptr);
@@ -1140,7 +1140,7 @@ JITRT_CallFunctionExAwaited(PyObject* func, PyObject* pargs, PyObject* kwargs) {
   return call_function_ex<true>(func, pargs, kwargs);
 }
 
-PyObject* JITRT_Call(
+JIT_RUNTIME_API PyObject* JITRT_Call(
     PyObject* callable,
     PyObject* const* args,
     size_t nargsf,
@@ -1193,7 +1193,7 @@ PyObject* JITRT_Call(
   return res;
 }
 
-PyObject* JITRT_CallMethod(
+JIT_RUNTIME_API PyObject* JITRT_CallMethod(
     PyObject* callable,
     PyObject* const* args,
     size_t nargsf,
@@ -1232,7 +1232,7 @@ PyObject* JITRT_CallMethod(
   return res;
 }
 
-PyObject* JITRT_Vectorcall(
+JIT_RUNTIME_API PyObject* JITRT_Vectorcall(
     PyObject* callable,
     PyObject* const* args,
     size_t nargsf,
@@ -1261,7 +1261,7 @@ PyObject* JITRT_Vectorcall(
   return res;
 }
 
-PyObject* JITRT_CallMethodDescrFast1(
+JIT_RUNTIME_API PyObject* JITRT_CallMethodDescrFast1(
     PyObject* callable,
     PyObject* self,
     PyObject* arg0) {
@@ -1286,7 +1286,7 @@ PyObject* JITRT_CallMethodDescrFast1(
   return res;
 }
 
-PyObject* JITRT_UnaryNot(PyObject* value) {
+JIT_RUNTIME_API PyObject* JITRT_UnaryNot(PyObject* value) {
   int res = PyObject_IsTrue(value);
   if (res == 0) {
     Py_INCREF(Py_True);
@@ -1298,7 +1298,7 @@ PyObject* JITRT_UnaryNot(PyObject* value) {
   return nullptr;
 }
 
-LoadMethodResult JITRT_GetMethod(PyObject* obj, PyObject* name) {
+JIT_RUNTIME_API LoadMethodResult JITRT_GetMethod(PyObject* obj, PyObject* name) {
   PyObject* method = nullptr;
   int found = _PyObject_GetMethod(obj, name, &method);
   if (method == nullptr) {
@@ -1348,7 +1348,7 @@ static inline PyObject* super_lookup_method_or_attr(
 #endif
 }
 
-LoadMethodResult JITRT_GetMethodFromSuper(
+JIT_RUNTIME_API LoadMethodResult JITRT_GetMethodFromSuper(
     PyObject* global_super,
     PyTypeObject* type,
     PyObject* self,
@@ -1377,7 +1377,7 @@ LoadMethodResult JITRT_GetMethodFromSuper(
   return {Py_None, result};
 }
 
-PyObject* JITRT_GetAttrFromSuper(
+JIT_RUNTIME_API PyObject* JITRT_GetAttrFromSuper(
     PyObject* global_super,
     PyTypeObject* type,
     PyObject* self,
@@ -1387,7 +1387,7 @@ PyObject* JITRT_GetAttrFromSuper(
       global_super, type, self, name, no_args_in_super_call, nullptr);
 }
 
-PyObject* JITRT_InvokeMethod(
+JIT_RUNTIME_API PyObject* JITRT_InvokeMethod(
     Py_ssize_t slot,
     PyObject** args,
     Py_ssize_t nargs,
@@ -1398,7 +1398,7 @@ PyObject* JITRT_InvokeMethod(
   return _PyClassLoader_InvokeMethod(vtable, slot, args, nargs);
 }
 
-PyObject* JITRT_InvokeClassMethod(
+JIT_RUNTIME_API PyObject* JITRT_InvokeClassMethod(
     Py_ssize_t slot,
     PyObject** args,
     Py_ssize_t nargs,
@@ -1411,7 +1411,7 @@ PyObject* JITRT_InvokeClassMethod(
 
 /* This function is inlined to LIR via kCHelpersManual, so changes here will
  * have no effect. */
-PyObject* JITRT_Cast(PyObject* obj, PyTypeObject* type) {
+JIT_RUNTIME_API PyObject* JITRT_Cast(PyObject* obj, PyTypeObject* type) {
   if (PyObject_TypeCheck(obj, type)) {
     return obj;
   }
@@ -1425,7 +1425,7 @@ PyObject* JITRT_Cast(PyObject* obj, PyTypeObject* type) {
   return nullptr;
 }
 
-PyObject* JITRT_CastOptional(PyObject* obj, PyTypeObject* type) {
+JIT_RUNTIME_API PyObject* JITRT_CastOptional(PyObject* obj, PyTypeObject* type) {
   if (_PyObject_TypeCheckOptional(obj, type, /* opt */ 1, /* exact */ 0)) {
     return obj;
   }
@@ -1439,7 +1439,7 @@ PyObject* JITRT_CastOptional(PyObject* obj, PyTypeObject* type) {
   return nullptr;
 }
 
-PyObject* JITRT_CastExact(PyObject* obj, PyTypeObject* type) {
+JIT_RUNTIME_API PyObject* JITRT_CastExact(PyObject* obj, PyTypeObject* type) {
   if (_PyObject_TypeCheckOptional(obj, type, /* opt */ 0, /* exact */ 1)) {
     return obj;
   }
@@ -1453,7 +1453,7 @@ PyObject* JITRT_CastExact(PyObject* obj, PyTypeObject* type) {
   return nullptr;
 }
 
-PyObject* JITRT_CastOptionalExact(PyObject* obj, PyTypeObject* type) {
+JIT_RUNTIME_API PyObject* JITRT_CastOptionalExact(PyObject* obj, PyTypeObject* type) {
   if (_PyObject_TypeCheckOptional(obj, type, /* opt */ 1, /* exact */ 1)) {
     return obj;
   }
@@ -1469,7 +1469,7 @@ PyObject* JITRT_CastOptionalExact(PyObject* obj, PyTypeObject* type) {
 
 /* Needed because cast to float does extra work that would be a pain to add to
  * the manual inlined LIR for JITRT_Cast. */
-PyObject* JITRT_CastToFloat(PyObject* obj) {
+JIT_RUNTIME_API PyObject* JITRT_CastToFloat(PyObject* obj) {
   if (PyObject_TypeCheck(obj, &PyFloat_Type)) {
     // cast to float is not considered pass-through by refcount insertion (since
     // it may produce a new reference), so even if in fact it is pass-through
@@ -1489,7 +1489,7 @@ PyObject* JITRT_CastToFloat(PyObject* obj) {
   return nullptr;
 }
 
-PyObject* JITRT_CastToFloatOptional(PyObject* obj) {
+JIT_RUNTIME_API PyObject* JITRT_CastToFloatOptional(PyObject* obj) {
   if (_PyObject_TypeCheckOptional(
           obj, &PyFloat_Type, /* opt */ 1, /* exact */ 0)) {
     // cast to float is not considered pass-through by refcount insertion (since
@@ -1510,129 +1510,129 @@ PyObject* JITRT_CastToFloatOptional(PyObject* obj) {
   return nullptr;
 }
 
-int64_t JITRT_ShiftLeft64(int64_t x, int64_t y) {
+JIT_RUNTIME_API int64_t JITRT_ShiftLeft64(int64_t x, int64_t y) {
   return x << y;
 }
-int32_t JITRT_ShiftLeft32(int32_t x, int32_t y) {
+JIT_RUNTIME_API int32_t JITRT_ShiftLeft32(int32_t x, int32_t y) {
   return x << y;
 }
 
-int64_t JITRT_ShiftRight64(int64_t x, int64_t y) {
+JIT_RUNTIME_API int64_t JITRT_ShiftRight64(int64_t x, int64_t y) {
   return x >> y;
 }
-int32_t JITRT_ShiftRight32(int32_t x, int32_t y) {
-  return x >> y;
-}
-
-uint64_t JITRT_ShiftRightUnsigned64(uint64_t x, uint64_t y) {
-  return x >> y;
-}
-uint32_t JITRT_ShiftRightUnsigned32(uint32_t x, uint32_t y) {
+JIT_RUNTIME_API int32_t JITRT_ShiftRight32(int32_t x, int32_t y) {
   return x >> y;
 }
 
-int64_t JITRT_Mod64(int64_t x, int64_t y) {
+JIT_RUNTIME_API uint64_t JITRT_ShiftRightUnsigned64(uint64_t x, uint64_t y) {
+  return x >> y;
+}
+JIT_RUNTIME_API uint32_t JITRT_ShiftRightUnsigned32(uint32_t x, uint32_t y) {
+  return x >> y;
+}
+
+JIT_RUNTIME_API int64_t JITRT_Mod64(int64_t x, int64_t y) {
   return x % y;
 }
-int32_t JITRT_Mod32(int32_t x, int32_t y) {
+JIT_RUNTIME_API int32_t JITRT_Mod32(int32_t x, int32_t y) {
   return x % y;
 }
 
-uint64_t JITRT_ModUnsigned64(uint64_t x, uint64_t y) {
+JIT_RUNTIME_API uint64_t JITRT_ModUnsigned64(uint64_t x, uint64_t y) {
   return x % y;
 }
-uint32_t JITRT_ModUnsigned32(uint32_t x, uint32_t y) {
+JIT_RUNTIME_API uint32_t JITRT_ModUnsigned32(uint32_t x, uint32_t y) {
   return x % y;
 }
 
-PyObject* JITRT_BoxI32(int32_t i) {
+JIT_RUNTIME_API PyObject* JITRT_BoxI32(int32_t i) {
   return PyLong_FromLong(i);
 }
 
-PyObject* JITRT_BoxU32(uint32_t i) {
+JIT_RUNTIME_API PyObject* JITRT_BoxU32(uint32_t i) {
   return PyLong_FromUnsignedLong(i);
 }
 
-PyObject* JITRT_BoxBool(uint32_t i) {
+JIT_RUNTIME_API PyObject* JITRT_BoxBool(uint32_t i) {
   if (i) {
     return Py_True;
   }
   return Py_False;
 }
 
-PyObject* JITRT_BoxI64(int64_t i) {
+JIT_RUNTIME_API PyObject* JITRT_BoxI64(int64_t i) {
   return PyLong_FromSsize_t(i);
 }
 
-PyObject* JITRT_BoxU64(uint64_t i) {
+JIT_RUNTIME_API PyObject* JITRT_BoxU64(uint64_t i) {
   return PyLong_FromSize_t(i);
 }
 
-PyObject* JITRT_BoxDouble(double_t d) {
+JIT_RUNTIME_API PyObject* JITRT_BoxDouble(double_t d) {
   return PyFloat_FromDouble(d);
 }
 
-double JITRT_PowerDouble(double x, double y) {
+JIT_RUNTIME_API double JITRT_PowerDouble(double x, double y) {
   return pow(x, y);
 }
 
-double JITRT_SqrtDouble(double x) {
+JIT_RUNTIME_API double JITRT_SqrtDouble(double x) {
   return sqrt(x);
 }
 
-double JITRT_Power32(int32_t x, int32_t y) {
+JIT_RUNTIME_API double JITRT_Power32(int32_t x, int32_t y) {
   return pow(x, y);
 }
 
-double JITRT_PowerUnsigned32(uint32_t x, uint32_t y) {
+JIT_RUNTIME_API double JITRT_PowerUnsigned32(uint32_t x, uint32_t y) {
   return pow(x, y);
 }
 
-double JITRT_Power64(int64_t x, int64_t y) {
+JIT_RUNTIME_API double JITRT_Power64(int64_t x, int64_t y) {
   return pow(x, y);
 }
 
-double JITRT_PowerUnsigned64(uint64_t x, uint64_t y) {
+JIT_RUNTIME_API double JITRT_PowerUnsigned64(uint64_t x, uint64_t y) {
   return pow(x, y);
 }
 
-void JITRT_SetI8_InArray(char* arr, uint64_t val, int64_t idx) {
+JIT_RUNTIME_API void JITRT_SetI8_InArray(char* arr, uint64_t val, int64_t idx) {
   arr[idx] = (int8_t)val;
 }
 
-void JITRT_SetU8_InArray(char* arr, uint64_t val, int64_t idx) {
+JIT_RUNTIME_API void JITRT_SetU8_InArray(char* arr, uint64_t val, int64_t idx) {
   arr[idx] = (uint8_t)val;
 }
 
-void JITRT_SetI16_InArray(char* arr, uint64_t val, int64_t idx) {
+JIT_RUNTIME_API void JITRT_SetI16_InArray(char* arr, uint64_t val, int64_t idx) {
   ((int16_t*)arr)[idx] = (int16_t)val;
 }
 
-void JITRT_SetU16_InArray(char* arr, uint64_t val, int64_t idx) {
+JIT_RUNTIME_API void JITRT_SetU16_InArray(char* arr, uint64_t val, int64_t idx) {
   ((uint16_t*)arr)[idx] = (uint16_t)val;
 }
 
-void JITRT_SetI32_InArray(char* arr, uint64_t val, int64_t idx) {
+JIT_RUNTIME_API void JITRT_SetI32_InArray(char* arr, uint64_t val, int64_t idx) {
   ((int32_t*)arr)[idx] = (int32_t)val;
 }
 
-void JITRT_SetU32_InArray(char* arr, uint64_t val, int64_t idx) {
+JIT_RUNTIME_API void JITRT_SetU32_InArray(char* arr, uint64_t val, int64_t idx) {
   ((uint32_t*)arr)[idx] = (uint32_t)val;
 }
 
-void JITRT_SetI64_InArray(char* arr, uint64_t val, int64_t idx) {
+JIT_RUNTIME_API void JITRT_SetI64_InArray(char* arr, uint64_t val, int64_t idx) {
   ((int64_t*)arr)[idx] = (int64_t)val;
 }
 
-void JITRT_SetU64_InArray(char* arr, uint64_t val, int64_t idx) {
+JIT_RUNTIME_API void JITRT_SetU64_InArray(char* arr, uint64_t val, int64_t idx) {
   ((uint64_t*)arr)[idx] = (uint64_t)val;
 }
 
-void JITRT_SetDouble_InArray(char* arr, double_t val, int64_t idx) {
+JIT_RUNTIME_API void JITRT_SetDouble_InArray(char* arr, double_t val, int64_t idx) {
   ((double_t*)arr)[idx] = val;
 }
 
-void JITRT_SetObj_InArray(char* arr, uint64_t val, int64_t idx) {
+JIT_RUNTIME_API void JITRT_SetObj_InArray(char* arr, uint64_t val, int64_t idx) {
   ((PyObject**)arr)[idx] = (PyObject*)val;
 }
 
@@ -1652,39 +1652,39 @@ static T checkedUnboxImpl(PyObject* obj) {
   return -1;
 }
 
-uint64_t JITRT_UnboxU64(PyObject* obj) {
+JIT_RUNTIME_API uint64_t JITRT_UnboxU64(PyObject* obj) {
   return PyLong_AsSize_t(obj);
 }
 
-uint32_t JITRT_UnboxU32(PyObject* obj) {
+JIT_RUNTIME_API uint32_t JITRT_UnboxU32(PyObject* obj) {
   return checkedUnboxImpl<uint32_t>(obj);
 }
 
-uint16_t JITRT_UnboxU16(PyObject* obj) {
+JIT_RUNTIME_API uint16_t JITRT_UnboxU16(PyObject* obj) {
   return checkedUnboxImpl<uint16_t>(obj);
 }
 
-uint8_t JITRT_UnboxU8(PyObject* obj) {
+JIT_RUNTIME_API uint8_t JITRT_UnboxU8(PyObject* obj) {
   return checkedUnboxImpl<uint8_t>(obj);
 }
 
-int64_t JITRT_UnboxI64(PyObject* obj) {
+JIT_RUNTIME_API int64_t JITRT_UnboxI64(PyObject* obj) {
   return PyLong_AsSsize_t(obj);
 }
 
-int32_t JITRT_UnboxI32(PyObject* obj) {
+JIT_RUNTIME_API int32_t JITRT_UnboxI32(PyObject* obj) {
   return checkedUnboxImpl<int32_t>(obj);
 }
 
-int16_t JITRT_UnboxI16(PyObject* obj) {
+JIT_RUNTIME_API int16_t JITRT_UnboxI16(PyObject* obj) {
   return checkedUnboxImpl<int16_t>(obj);
 }
 
-int8_t JITRT_UnboxI8(PyObject* obj) {
+JIT_RUNTIME_API int8_t JITRT_UnboxI8(PyObject* obj) {
   return checkedUnboxImpl<int8_t>(obj);
 }
 
-PyObject* JITRT_ImportName(
+JIT_RUNTIME_API PyObject* JITRT_ImportName(
     PyThreadState* tstate,
     PyObject* name,
     PyObject* fromlist,
@@ -1796,7 +1796,7 @@ static inline PyObject* make_gen_object(
   return reinterpret_cast<PyObject*>(gen);
 }
 
-PyObject* JITRT_MakeGenObject(
+JIT_RUNTIME_API PyObject* JITRT_MakeGenObject(
     PyThreadState* tstate,
     GenResumeFunc resume_entry,
     size_t spill_words,
@@ -1806,7 +1806,7 @@ PyObject* JITRT_MakeGenObject(
       resume_entry, tstate, spill_words, code_rt, code);
 }
 
-PyObject* JITRT_MakeGenObjectAsyncGen(
+JIT_RUNTIME_API PyObject* JITRT_MakeGenObjectAsyncGen(
     PyThreadState* tstate,
     GenResumeFunc resume_entry,
     size_t spill_words,
@@ -1816,7 +1816,7 @@ PyObject* JITRT_MakeGenObjectAsyncGen(
       resume_entry, tstate, spill_words, code_rt, code);
 }
 
-PyObject* JITRT_MakeGenObjectCoro(
+JIT_RUNTIME_API PyObject* JITRT_MakeGenObjectCoro(
     PyThreadState* tstate,
     GenResumeFunc resume_entry,
     size_t spill_words,
@@ -1827,7 +1827,7 @@ PyObject* JITRT_MakeGenObjectCoro(
 }
 #endif
 
-void JITRT_SetCurrentAwaiter(PyObject* awaitable, PyThreadState* ts) {
+JIT_RUNTIME_API void JITRT_SetCurrentAwaiter(PyObject* awaitable, PyThreadState* ts) {
 #ifdef ENABLE_GENERATOR_AWAITER
 
 #if PY_VERSION_HEX < 0x030C0000
@@ -1849,7 +1849,7 @@ void JITRT_SetCurrentAwaiter(PyObject* awaitable, PyThreadState* ts) {
 #endif // ENABLE_GENERATOR_AWAITER
 }
 
-JITRT_GenSendRes JITRT_GenSend(
+JIT_RUNTIME_API JITRT_GenSendRes JITRT_GenSend(
     PyObject* gen,
     PyObject* v,
     uint64_t finish_yield_from
@@ -1889,7 +1889,7 @@ JITRT_GenSendRes JITRT_GenSend(
   return {retval, 0};
 }
 
-JITRT_GenSendRes JITRT_GenSendHandleStopAsyncIteration(
+JIT_RUNTIME_API JITRT_GenSendRes JITRT_GenSendHandleStopAsyncIteration(
     PyObject* gen,
     PyObject* v,
     uint64_t finish_yield_from
@@ -1915,7 +1915,7 @@ JITRT_GenSendRes JITRT_GenSendHandleStopAsyncIteration(
   return res;
 }
 
-PyObject* JITRT_FormatValue(
+JIT_RUNTIME_API PyObject* JITRT_FormatValue(
     PyThreadState* tstate,
     PyObject* fmt_spec,
     PyObject* value,
@@ -1972,7 +1972,7 @@ PyObject* JITRT_FormatValue(
   return PyObject_Format(value, fmt_spec);
 }
 
-PyObject* JITRT_BuildString(
+JIT_RUNTIME_API PyObject* JITRT_BuildString(
     void* /*unused*/,
     PyObject** args,
     size_t nargsf,
@@ -1987,7 +1987,7 @@ PyObject* JITRT_BuildString(
   return _PyUnicode_JoinArray(empty, args, nargs);
 }
 
-JITRT_StaticCallReturn JITRT_FailedDeferredCompileShim(PyObject** args) {
+JIT_RUNTIME_API JITRT_StaticCallReturn JITRT_FailedDeferredCompileShim(PyObject** args) {
   void* no_error = reinterpret_cast<void*>(1);
 
   // The function object is always the first argument in the static calling
@@ -2109,7 +2109,7 @@ JITRT_StaticCallReturn JITRT_FailedDeferredCompileShim(PyObject** args) {
   return JITRT_StaticCallReturn{res, no_error};
 }
 
-PyObject* JITRT_UnpackExToTuple(
+JIT_RUNTIME_API PyObject* JITRT_UnpackExToTuple(
     PyThreadState* tstate,
     PyObject* iterable,
     int before,
@@ -2195,7 +2195,7 @@ PyObject* JITRT_UnpackExToTuple(
   return reinterpret_cast<PyObject*>(tuple.release());
 }
 
-int JITRT_UnicodeEquals(PyObject* s1, PyObject* s2, int equals) {
+JIT_RUNTIME_API int JITRT_UnicodeEquals(PyObject* s1, PyObject* s2, int equals) {
   // one of these must be unicode for the quality comparison to be okay
   assert(PyUnicode_CheckExact(s1) || PyUnicode_CheckExact(s2));
   if (s1 == s2) {
@@ -2236,7 +2236,7 @@ int JITRT_UnicodeEquals(PyObject* s1, PyObject* s2, int equals) {
   return PyObject_RichCompareBool(s1, s2, equals);
 }
 
-PyObject* JITRT_SequenceContains(PyObject* haystack, PyObject* needle) {
+JIT_RUNTIME_API PyObject* JITRT_SequenceContains(PyObject* haystack, PyObject* needle) {
   int result = PySequence_Contains(haystack, needle);
   if (result < 0) {
     return nullptr;
@@ -2247,7 +2247,7 @@ PyObject* JITRT_SequenceContains(PyObject* haystack, PyObject* needle) {
   Py_RETURN_FALSE;
 }
 
-PyObject* JITRT_SequenceNotContains(PyObject* haystack, PyObject* needle) {
+JIT_RUNTIME_API PyObject* JITRT_SequenceNotContains(PyObject* haystack, PyObject* needle) {
   int result = PySequence_Contains(haystack, needle);
   if (result < 0) {
     return nullptr;
@@ -2258,7 +2258,7 @@ PyObject* JITRT_SequenceNotContains(PyObject* haystack, PyObject* needle) {
   Py_RETURN_TRUE;
 }
 
-int JITRT_NotContainsBool(PyObject* w, PyObject* v) {
+JIT_RUNTIME_API int JITRT_NotContainsBool(PyObject* w, PyObject* v) {
   int res = PySequence_Contains(w, v);
   if (res == -1) {
     return -1;
@@ -2268,7 +2268,7 @@ int JITRT_NotContainsBool(PyObject* w, PyObject* v) {
 
 /* Perform a rich comparison with integer result.  This wraps
    PyObject_RichCompare(), returning -1 for error, 0 for false, 1 for true. */
-int JITRT_RichCompareBool(PyObject* v, PyObject* w, int op) {
+JIT_RUNTIME_API int JITRT_RichCompareBool(PyObject* v, PyObject* w, int op) {
   Ref<> res = Ref<>::steal(PyObject_RichCompare(v, w, op));
 
   if (res == nullptr) {
@@ -2281,13 +2281,13 @@ int JITRT_RichCompareBool(PyObject* v, PyObject* w, int op) {
 }
 
 /* perform a batch decref to the objects in args */
-void JITRT_BatchDecref(PyObject** args, int nargs) {
+JIT_RUNTIME_API void JITRT_BatchDecref(PyObject** args, int nargs) {
   for (int i = 0; i < nargs; i++) {
     Py_DECREF(args[i]);
   }
 }
 
-Py_ssize_t JITRT_CheckSequenceBounds(PyObject* s, Py_ssize_t i) {
+JIT_RUNTIME_API Py_ssize_t JITRT_CheckSequenceBounds(PyObject* s, Py_ssize_t i) {
   JIT_DCHECK(!PyErr_Occurred(), "called with error set");
   i = i < 0 ? i + Py_SIZE(s) : i;
   if (i < 0 || i >= Py_SIZE(s)) {
@@ -2305,7 +2305,7 @@ Py_ssize_t JITRT_CheckSequenceBounds(PyObject* s, Py_ssize_t i) {
   return i;
 }
 
-PyObject* JITRT_GetLength(PyObject* obj) {
+JIT_RUNTIME_API PyObject* JITRT_GetLength(PyObject* obj) {
   // Same as GET_LEN handler in Python/ceval.c
   Py_ssize_t len = PyObject_Length(obj);
   if (len < 0) {
@@ -2314,11 +2314,11 @@ PyObject* JITRT_GetLength(PyObject* obj) {
   return PyLong_FromSsize_t(len);
 }
 
-int64_t JITRT_GetLengthInt64(PyObject* obj) {
+JIT_RUNTIME_API int64_t JITRT_GetLengthInt64(PyObject* obj) {
   return PyObject_Length(obj);
 }
 
-int JITRT_DictUpdate(PyThreadState* tstate, PyObject* dict, PyObject* update) {
+JIT_RUNTIME_API int JITRT_DictUpdate(PyThreadState* tstate, PyObject* dict, PyObject* update) {
   if (PyDict_Update(dict, update) < 0) {
     if (_PyErr_ExceptionMatches(tstate, PyExc_AttributeError)) {
       _PyErr_Format(
@@ -2332,7 +2332,7 @@ int JITRT_DictUpdate(PyThreadState* tstate, PyObject* dict, PyObject* update) {
   return 0;
 }
 
-int JITRT_DictMerge(
+JIT_RUNTIME_API int JITRT_DictMerge(
     PyThreadState* tstate,
     PyObject* dict,
     PyObject* update,
@@ -2344,7 +2344,7 @@ int JITRT_DictMerge(
   return 0;
 }
 
-PyObject* JITRT_CopyDictWithoutKeys(PyObject* subject, PyObject* keys) {
+JIT_RUNTIME_API PyObject* JITRT_CopyDictWithoutKeys(PyObject* subject, PyObject* keys) {
   // Copied from Python/ceval.c implementation of COPY_DICT_WITHOUT_KEYS.
   Ref<> rest(Ref<>::steal(PyDict_New()));
   if (rest == nullptr || PyDict_Update(rest, subject)) {
@@ -2359,12 +2359,12 @@ PyObject* JITRT_CopyDictWithoutKeys(PyObject* subject, PyObject* keys) {
   return rest.release();
 }
 
-PyObject* JITRT_LoadName(PyThreadState* tstate, int name_idx) {
+JIT_RUNTIME_API PyObject* JITRT_LoadName(PyThreadState* tstate, int name_idx) {
   jit::RuntimeFrameState rtfs = jit::runtimeFrameStateFromThreadState(tstate);
   return PyTuple_GET_ITEM(rtfs.code()->co_names, name_idx);
 }
 
-void JITRT_FormatAwaitableError(
+JIT_RUNTIME_API void JITRT_FormatAwaitableError(
     PyThreadState* tstate,
     PyTypeObject* type,
     bool is_aenter) {
@@ -2379,7 +2379,7 @@ void JITRT_FormatAwaitableError(
   _PyErr_Format(tstate, PyExc_TypeError, msg, type->tp_name);
 }
 
-void JITRT_IncRefTotal() {
+JIT_RUNTIME_API void JITRT_IncRefTotal() {
 #ifdef Py_REF_DEBUG
 #if PY_VERSION_HEX < 0x030C0000
   _Py_RefTotal++;
@@ -2389,7 +2389,7 @@ void JITRT_IncRefTotal() {
 #endif
 }
 
-void JITRT_DecRefTotal() {
+JIT_RUNTIME_API void JITRT_DecRefTotal() {
 #ifdef Py_REF_DEBUG
 #if PY_VERSION_HEX < 0x030C0000
   _Py_RefTotal--;
@@ -2400,7 +2400,7 @@ void JITRT_DecRefTotal() {
 }
 
 #if PY_VERSION_HEX >= 0x030C0000
-PyObject* JITRT_LookupAttrSpecial(
+JIT_RUNTIME_API PyObject* JITRT_LookupAttrSpecial(
     PyObject* obj,
     PyObject* attr,
     const char* failure_fmt_str) {
@@ -2416,7 +2416,7 @@ PyObject* JITRT_LookupAttrSpecial(
 }
 #endif
 
-LoadMethodResult JITRT_LoadSpecial(
+JIT_RUNTIME_API LoadMethodResult JITRT_LoadSpecial(
     [[maybe_unused]] PyObject* self,
     [[maybe_unused]] int special_idx) {
 #if PY_VERSION_HEX >= 0x030E0000
@@ -2452,7 +2452,7 @@ LoadMethodResult JITRT_LoadSpecial(
 }
 
 #ifdef Py_GIL_DISABLED
-void JITRT_AtQuiescentState(PyThreadState* tstate) {
+JIT_RUNTIME_API void JITRT_AtQuiescentState(PyThreadState* tstate) {
   _Py_qsbr_quiescent_state(
       (reinterpret_cast<_PyThreadStateImpl*>(tstate))->qsbr);
 }
@@ -2482,7 +2482,7 @@ PyObject JITRT_IterDoneSentinel = {
 #endif
     nullptr};
 
-PyObject* JITRT_InvokeIterNext(PyObject* iterator) {
+JIT_RUNTIME_API PyObject* JITRT_InvokeIterNext(PyObject* iterator) {
   iternextfunc iternext_f = Py_TYPE(iterator)->tp_iternext;
   if (iternext_f == nullptr) {
     PyErr_Format(

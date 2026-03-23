@@ -11,6 +11,10 @@
 #include "cinderx/Common/util.h"
 #include "cinderx/StaticPython/typed-args-info.h"
 
+// JIT Runtime API attribute - prevents LTO from inlining these functions
+#define JIT_RUNTIME_API \
+    __attribute__((noinline, visibility("default")))
+
 namespace jit {
 class CodeRuntime;
 struct GenDataFooter;
@@ -38,17 +42,17 @@ struct JITRT_StaticCallFPReturn {
  * Returns the thread state that the freshly allocated frame was linked to
  * (accessible via ->frame) on success or NULL on error.
  */
-PyThreadState* JITRT_AllocateAndLinkFrame(
+JIT_RUNTIME_API PyThreadState* JITRT_AllocateAndLinkFrame(
     PyCodeObject* code,
     PyObject* builtins,
     PyObject* globals);
 #else
 
-PyThreadState* JITRT_AllocateAndLinkInterpreterFrame_Debug(
+JIT_RUNTIME_API PyThreadState* JITRT_AllocateAndLinkInterpreterFrame_Debug(
     PyFunctionObject* func,
     PyCodeObject* jit_code_object);
 
-PyThreadState* JITRT_AllocateAndLinkInterpreterFrame_Release(
+JIT_RUNTIME_API PyThreadState* JITRT_AllocateAndLinkInterpreterFrame_Release(
     PyFunctionObject* func);
 
 std::pair<PyThreadState*, jit::GenDataFooter*>
@@ -59,7 +63,7 @@ JITRT_AllocateAndLinkGenAndInterpreterFrame(
     GenResumeFunc resume_entry,
     uint64_t original_frame_pointer);
 
-void JITRT_InitFrameCellVars(
+JIT_RUNTIME_API void JITRT_InitFrameCellVars(
     PyFunctionObject* func,
     int nvars,
     PyThreadState* tstate);
@@ -75,10 +79,10 @@ JITRT_UnlinkGenFrameAndReturnGenDataFooter(PyThreadState* tstate);
  * Used by JITRT_UnlinkFrame, and designed to only be used separately if
  * something else has already unlinked the frame.
  */
-void JITRT_DecrefFrame(PyFrameObject* frame);
+JIT_RUNTIME_API void JITRT_DecrefFrame(PyFrameObject* frame);
 
-void JITRT_Decref(PyObject* obj);
-void JITRT_XDecref(PyObject* obj);
+JIT_RUNTIME_API void JITRT_Decref(PyObject* obj);
+JIT_RUNTIME_API void JITRT_XDecref(PyObject* obj);
 
 /*
  * Helper function to unlink only the python frame.
@@ -86,14 +90,14 @@ void JITRT_XDecref(PyObject* obj);
  * Designed to be used in tandem with JITRT_AllocateAndLinkFrame but when
  * we have already unlinked the shadow frame.
  */
-void JITRT_UnlinkPyFrame(PyThreadState* tstate);
+JIT_RUNTIME_API void JITRT_UnlinkPyFrame(PyThreadState* tstate);
 /*
  * Helper function to unlink a frame.
  *
  * Designed to be used in tandem with JITRT_AllocateAndLinkFrame. This checks
  * if the frame has escaped (> 1 refcount) and tracks it if so.
  */
-void JITRT_UnlinkFrame(bool unlink_shadow_frame);
+JIT_RUNTIME_API void JITRT_UnlinkFrame(bool unlink_shadow_frame);
 
 /*
  * Call a Python function through the interpreter's vectorcall entry point,
@@ -102,7 +106,7 @@ void JITRT_UnlinkFrame(bool unlink_shadow_frame);
  * This is primarily used as a portable fallback when native code generation is
  * unavailable.
  */
-PyObject* JITRT_CallInterpretedVectorcall(
+JIT_RUNTIME_API PyObject* JITRT_CallInterpretedVectorcall(
     PyObject* func,
     PyObject* const* stack,
     size_t nargsf,
@@ -111,19 +115,19 @@ PyObject* JITRT_CallInterpretedVectorcall(
 /*
  * Handles a call that includes kw arguments or excess tuple arguments
  */
-PyObject* JITRT_CallWithKeywordArgs(
+JIT_RUNTIME_API PyObject* JITRT_CallWithKeywordArgs(
     PyFunctionObject* func,
     PyObject** args,
     size_t nargsf,
     PyObject* kwnames);
 
-JITRT_StaticCallReturn JITRT_CallWithIncorrectArgcount(
+JIT_RUNTIME_API JITRT_StaticCallReturn JITRT_CallWithIncorrectArgcount(
     PyFunctionObject* func,
     PyObject** args,
     size_t nargsf,
     int argcount);
 
-JITRT_StaticCallFPReturn JITRT_CallWithIncorrectArgcountFPReturn(
+JIT_RUNTIME_API JITRT_StaticCallFPReturn JITRT_CallWithIncorrectArgcountFPReturn(
     PyFunctionObject* func,
     PyObject** args,
     size_t nargsf,
@@ -132,7 +136,7 @@ JITRT_StaticCallFPReturn JITRT_CallWithIncorrectArgcountFPReturn(
 /* Helper function to report an error when the arguments aren't correct for
  * a static function call.  Dispatches to the eval loop to let the normal
  * argument checking prologue run and then report the error */
-PyObject* JITRT_ReportStaticArgTypecheckErrors(
+JIT_RUNTIME_API PyObject* JITRT_ReportStaticArgTypecheckErrors(
     PyObject* func,
     PyObject** args,
     size_t nargsf,
@@ -141,7 +145,7 @@ PyObject* JITRT_ReportStaticArgTypecheckErrors(
 /* Variation of JITRT_ReportStaticArgTypecheckErrors but also sets the primitive
    return value error in addition to returning the normal NULL error indicator
  */
-JITRT_StaticCallReturn JITRT_ReportStaticArgTypecheckErrorsWithPrimitiveReturn(
+JIT_RUNTIME_API JITRT_StaticCallReturn JITRT_ReportStaticArgTypecheckErrorsWithPrimitiveReturn(
     PyObject* func,
     PyObject** args,
     size_t nargsf,
@@ -150,7 +154,7 @@ JITRT_StaticCallReturn JITRT_ReportStaticArgTypecheckErrorsWithPrimitiveReturn(
 /* Variation of JITRT_ReportStaticArgTypecheckErrors but also sets the double
    return value error in addition to returning the normal NULL error indicator
  */
-JITRT_StaticCallFPReturn JITRT_ReportStaticArgTypecheckErrorsWithDoubleReturn(
+JIT_RUNTIME_API JITRT_StaticCallFPReturn JITRT_ReportStaticArgTypecheckErrorsWithDoubleReturn(
     PyObject* func,
     PyObject** args,
     size_t nargsf,
@@ -166,21 +170,21 @@ JITRT_LoadGlobal(PyObject* globals, PyObject* builtins, PyObject* name);
 /*
  * Load a global value given a Python thread state.
  */
-PyObject* JITRT_LoadGlobalFromThreadState(
+JIT_RUNTIME_API PyObject* JITRT_LoadGlobalFromThreadState(
     PyThreadState* tstate,
     PyObject* name);
 
 /*
  * Load the globals dict from a Python thread state.
  */
-PyObject* JITRT_LoadGlobalsDict(PyThreadState* tstate);
+JIT_RUNTIME_API PyObject* JITRT_LoadGlobalsDict(PyThreadState* tstate);
 
 /*
  * Slice an exact list without allocating an intermediate slice object.
  *
  * `start` and `stop` must be either `Py_None` or an exact `int`.
  */
-PyObject* JITRT_ListSlice(PyObject* list, PyObject* start, PyObject* stop);
+JIT_RUNTIME_API PyObject* JITRT_ListSlice(PyObject* list, PyObject* start, PyObject* stop);
 
 #if PY_VERSION_HEX >= 0x030E0000 && PY_VERSION_HEX < 0x030F0000
 /*
@@ -189,20 +193,20 @@ PyObject* JITRT_ListSlice(PyObject* list, PyObject* start, PyObject* stop);
  * Returns a new reference to the found value on hit, a private sentinel on
  * miss without setting an exception, and NULL on real error.
  */
-PyObject* JITRT_GetDictItemOrSentinel(PyObject* dict, PyObject* key);
+JIT_RUNTIME_API PyObject* JITRT_GetDictItemOrSentinel(PyObject* dict, PyObject* key);
 
 /*
  * Return the private sentinel object used by JITRT_GetDictItemOrSentinel().
  * The returned object is borrowed and must only be used for identity checks.
  */
-PyObject* JITRT_GetDictItemMissSentinel(void);
+JIT_RUNTIME_API PyObject* JITRT_GetDictItemMissSentinel(void);
 
 /*
  * Finish the miss path of copy._deepcopy_tuple() without raising KeyError.
  *
  * Returns either a new reference to `x` or a new tuple built from `y`.
  */
-PyObject* JITRT_DeepcopyTuplePostMiss(PyObject* x, PyObject* y);
+JIT_RUNTIME_API PyObject* JITRT_DeepcopyTuplePostMiss(PyObject* x, PyObject* y);
 #endif
 
 /*
@@ -235,7 +239,7 @@ JITRT_CallFunctionExAwaited(PyObject* func, PyObject* pargs, PyObject* kwargs);
  * not Py_None, but we use NULL return values in HIR to determine where to
  * deopt.
  */
-PyObject* JITRT_Call(
+JIT_RUNTIME_API PyObject* JITRT_Call(
     PyObject* callable,
     PyObject* const* args,
     size_t nargsf,
@@ -245,7 +249,7 @@ PyObject* JITRT_Call(
  * Perform a method-shaped call where args[0] is the self-or-null value coming
  * from a LoadMethod result.
  */
-PyObject* JITRT_CallMethod(
+JIT_RUNTIME_API PyObject* JITRT_CallMethod(
     PyObject* callable,
     PyObject* const* args,
     size_t nargsf,
@@ -255,7 +259,7 @@ PyObject* JITRT_CallMethod(
  * Performs a function call with a vectorcall. Will check and handle any
  * eval breaker events after the call.
  */
-PyObject* JITRT_Vectorcall(
+JIT_RUNTIME_API PyObject* JITRT_Vectorcall(
     PyObject* callable,
     PyObject* const* args,
     size_t nargsf,
@@ -265,7 +269,7 @@ PyObject* JITRT_Vectorcall(
  * Call an exact method descriptor with METH_FASTCALL and a single explicit
  * argument, then handle periodic activities like JITRT_Vectorcall().
  */
-PyObject* JITRT_CallMethodDescrFast1(
+JIT_RUNTIME_API PyObject* JITRT_CallMethodDescrFast1(
     PyObject* callable,
     PyObject* self,
     PyObject* arg0);
@@ -273,7 +277,7 @@ PyObject* JITRT_CallMethodDescrFast1(
 /*
  * Perform a method lookup on an object.
  */
-LoadMethodResult JITRT_GetMethod(PyObject* obj, PyObject* name);
+JIT_RUNTIME_API LoadMethodResult JITRT_GetMethod(PyObject* obj, PyObject* name);
 
 /*
  * Perform an attribute lookup in a super class
@@ -281,7 +285,7 @@ LoadMethodResult JITRT_GetMethod(PyObject* obj, PyObject* name);
  * This is used to avoid bound method creation for attribute lookups that
  * correspond to method calls (e.g. `self.foo()`).
  */
-LoadMethodResult JITRT_GetMethodFromSuper(
+JIT_RUNTIME_API LoadMethodResult JITRT_GetMethodFromSuper(
     PyObject* global_super,
     PyTypeObject* type,
     PyObject* self,
@@ -291,7 +295,7 @@ LoadMethodResult JITRT_GetMethodFromSuper(
 /*
  * Perform an attribute lookup in a super class
  */
-PyObject* JITRT_GetAttrFromSuper(
+JIT_RUNTIME_API PyObject* JITRT_GetAttrFromSuper(
     PyObject* super_globals,
     PyTypeObject* type,
     PyObject* self,
@@ -304,13 +308,13 @@ PyObject* JITRT_GetAttrFromSuper(
  * Checks if value is truthy, and returns Py_False if it is, or Py_True if
  * it's not.  Returns NULL if the object doesn't support truthyness.
  */
-PyObject* JITRT_UnaryNot(PyObject* value);
+JIT_RUNTIME_API PyObject* JITRT_UnaryNot(PyObject* value);
 
 /*
  * Invokes a function stored within the method table for the object.
  * The method table lives off tp_cache in the type object
  */
-PyObject* JITRT_InvokeMethod(
+JIT_RUNTIME_API PyObject* JITRT_InvokeMethod(
     Py_ssize_t slot,
     PyObject** args,
     Py_ssize_t nargs,
@@ -319,7 +323,7 @@ PyObject* JITRT_InvokeMethod(
  * Invokes a function stored within the method table for the object.
  * The method table lives off tp_cache of self.
  */
-PyObject* JITRT_InvokeClassMethod(
+JIT_RUNTIME_API PyObject* JITRT_InvokeClassMethod(
     Py_ssize_t slot,
     PyObject** args,
     Py_ssize_t nargs,
@@ -329,7 +333,7 @@ PyObject* JITRT_InvokeClassMethod(
  * Loads an indirect function, optionally loading it from the descriptor
  * if the indirect cache fails.
  */
-PyObject* JITRT_LoadFunctionIndirect(PyObject** func, PyObject* descr);
+JIT_RUNTIME_API PyObject* JITRT_LoadFunctionIndirect(PyObject** func, PyObject* descr);
 
 /*
  * Performs a type check on an object, raising an error if the object is
@@ -337,19 +341,19 @@ PyObject* JITRT_LoadFunctionIndirect(PyObject** func, PyObject* descr);
  * check which doesn't support dynamic behaviors against the type or
  * proxy behaviors against obj.__class__
  */
-PyObject* JITRT_Cast(PyObject* obj, PyTypeObject* type);
+JIT_RUNTIME_API PyObject* JITRT_Cast(PyObject* obj, PyTypeObject* type);
 
 /*
  * JITRT_Cast when target type is float. This case requires extra work
  * because Python typing pretends int is a subtype of float, so CAST
  * needs to coerce int to float.
  */
-PyObject* JITRT_CastToFloat(PyObject* obj);
+JIT_RUNTIME_API PyObject* JITRT_CastToFloat(PyObject* obj);
 
 /*
  * JITRT_CastToFloat but with None allowed.
  */
-PyObject* JITRT_CastToFloatOptional(PyObject* obj);
+JIT_RUNTIME_API PyObject* JITRT_CastToFloatOptional(PyObject* obj);
 
 /*
  * Performs a type check on an object, raising an error if the object is
@@ -357,68 +361,68 @@ PyObject* JITRT_CastToFloatOptional(PyObject* obj);
  * real type check which doesn't support dynamic behaviors against the
  * type or proxy behaviors against obj.__class__.
  */
-PyObject* JITRT_CastOptional(PyObject* obj, PyTypeObject* type);
+JIT_RUNTIME_API PyObject* JITRT_CastOptional(PyObject* obj, PyTypeObject* type);
 /* Performs a type check on obj, but does not allow passing a subclass of type.
  */
-PyObject* JITRT_CastExact(PyObject* obj, PyTypeObject* type);
-PyObject* JITRT_CastOptionalExact(PyObject* obj, PyTypeObject* type);
+JIT_RUNTIME_API PyObject* JITRT_CastExact(PyObject* obj, PyTypeObject* type);
+JIT_RUNTIME_API PyObject* JITRT_CastOptionalExact(PyObject* obj, PyTypeObject* type);
 
 /* Helper methods to implement left shift, which wants its operand in cl */
-int64_t JITRT_ShiftLeft64(int64_t x, int64_t y);
-int32_t JITRT_ShiftLeft32(int32_t x, int32_t y);
+JIT_RUNTIME_API int64_t JITRT_ShiftLeft64(int64_t x, int64_t y);
+JIT_RUNTIME_API int32_t JITRT_ShiftLeft32(int32_t x, int32_t y);
 
 /* Helper methods to implement right shift, which wants its operand in cl */
-int64_t JITRT_ShiftRight64(int64_t x, int64_t y);
-int32_t JITRT_ShiftRight32(int32_t x, int32_t y);
+JIT_RUNTIME_API int64_t JITRT_ShiftRight64(int64_t x, int64_t y);
+JIT_RUNTIME_API int32_t JITRT_ShiftRight32(int32_t x, int32_t y);
 
 /* Helper methods to implement unsigned right shift, which wants its operand in
  * cl
  */
-uint64_t JITRT_ShiftRightUnsigned64(uint64_t x, uint64_t y);
-uint32_t JITRT_ShiftRightUnsigned32(uint32_t x, uint32_t y);
+JIT_RUNTIME_API uint64_t JITRT_ShiftRightUnsigned64(uint64_t x, uint64_t y);
+JIT_RUNTIME_API uint32_t JITRT_ShiftRightUnsigned32(uint32_t x, uint32_t y);
 
 /* Helper methods to implement signed modulus */
-int64_t JITRT_Mod64(int64_t x, int64_t y);
-int32_t JITRT_Mod32(int32_t x, int32_t y);
+JIT_RUNTIME_API int64_t JITRT_Mod64(int64_t x, int64_t y);
+JIT_RUNTIME_API int32_t JITRT_Mod32(int32_t x, int32_t y);
 
 /* Helper methods to implement unsigned modulus */
-uint64_t JITRT_ModUnsigned64(uint64_t x, uint64_t y);
-uint32_t JITRT_ModUnsigned32(uint32_t x, uint32_t y);
+JIT_RUNTIME_API uint64_t JITRT_ModUnsigned64(uint64_t x, uint64_t y);
+JIT_RUNTIME_API uint32_t JITRT_ModUnsigned32(uint32_t x, uint32_t y);
 
-PyObject* JITRT_BoxI32(int32_t i);
-PyObject* JITRT_BoxU32(uint32_t i);
-PyObject* JITRT_BoxBool(uint32_t i);
-PyObject* JITRT_BoxI64(int64_t i);
-PyObject* JITRT_BoxU64(uint64_t i);
-PyObject* JITRT_BoxDouble(double_t d);
+JIT_RUNTIME_API PyObject* JITRT_BoxI32(int32_t i);
+JIT_RUNTIME_API PyObject* JITRT_BoxU32(uint32_t i);
+JIT_RUNTIME_API PyObject* JITRT_BoxBool(uint32_t i);
+JIT_RUNTIME_API PyObject* JITRT_BoxI64(int64_t i);
+JIT_RUNTIME_API PyObject* JITRT_BoxU64(uint64_t i);
+JIT_RUNTIME_API PyObject* JITRT_BoxDouble(double_t d);
 
-double JITRT_PowerDouble(double x, double y);
-double JITRT_SqrtDouble(double x);
-double JITRT_Power32(int32_t x, int32_t y);
-double JITRT_PowerUnsigned32(uint32_t x, uint32_t y);
-double JITRT_Power64(int64_t x, int64_t y);
-double JITRT_PowerUnsigned64(uint64_t x, uint64_t y);
+JIT_RUNTIME_API double JITRT_PowerDouble(double x, double y);
+JIT_RUNTIME_API double JITRT_SqrtDouble(double x);
+JIT_RUNTIME_API double JITRT_Power32(int32_t x, int32_t y);
+JIT_RUNTIME_API double JITRT_PowerUnsigned32(uint32_t x, uint32_t y);
+JIT_RUNTIME_API double JITRT_Power64(int64_t x, int64_t y);
+JIT_RUNTIME_API double JITRT_PowerUnsigned64(uint64_t x, uint64_t y);
 
 /* Array set helpers */
-void JITRT_SetI8_InArray(char* arr, uint64_t val, int64_t idx);
-void JITRT_SetU8_InArray(char* arr, uint64_t val, int64_t idx);
-void JITRT_SetI16_InArray(char* arr, uint64_t val, int64_t idx);
-void JITRT_SetU16_InArray(char* arr, uint64_t val, int64_t idx);
-void JITRT_SetI32_InArray(char* arr, uint64_t val, int64_t idx);
-void JITRT_SetU32_InArray(char* arr, uint64_t val, int64_t idx);
-void JITRT_SetI64_InArray(char* arr, uint64_t val, int64_t idx);
-void JITRT_SetU64_InArray(char* arr, uint64_t val, int64_t idx);
-void JITRT_SetDouble_InArray(char* arr, double_t val, int64_t idx);
-void JITRT_SetObj_InArray(char* arr, uint64_t val, int64_t idx);
+JIT_RUNTIME_API void JITRT_SetI8_InArray(char* arr, uint64_t val, int64_t idx);
+JIT_RUNTIME_API void JITRT_SetU8_InArray(char* arr, uint64_t val, int64_t idx);
+JIT_RUNTIME_API void JITRT_SetI16_InArray(char* arr, uint64_t val, int64_t idx);
+JIT_RUNTIME_API void JITRT_SetU16_InArray(char* arr, uint64_t val, int64_t idx);
+JIT_RUNTIME_API void JITRT_SetI32_InArray(char* arr, uint64_t val, int64_t idx);
+JIT_RUNTIME_API void JITRT_SetU32_InArray(char* arr, uint64_t val, int64_t idx);
+JIT_RUNTIME_API void JITRT_SetI64_InArray(char* arr, uint64_t val, int64_t idx);
+JIT_RUNTIME_API void JITRT_SetU64_InArray(char* arr, uint64_t val, int64_t idx);
+JIT_RUNTIME_API void JITRT_SetDouble_InArray(char* arr, double_t val, int64_t idx);
+JIT_RUNTIME_API void JITRT_SetObj_InArray(char* arr, uint64_t val, int64_t idx);
 
-uint64_t JITRT_UnboxU64(PyObject* obj);
-uint32_t JITRT_UnboxU32(PyObject* obj);
-uint16_t JITRT_UnboxU16(PyObject* obj);
-uint8_t JITRT_UnboxU8(PyObject* obj);
-int64_t JITRT_UnboxI64(PyObject* obj);
-int32_t JITRT_UnboxI32(PyObject* obj);
-int16_t JITRT_UnboxI16(PyObject* obj);
-int8_t JITRT_UnboxI8(PyObject* obj);
+JIT_RUNTIME_API uint64_t JITRT_UnboxU64(PyObject* obj);
+JIT_RUNTIME_API uint32_t JITRT_UnboxU32(PyObject* obj);
+JIT_RUNTIME_API uint16_t JITRT_UnboxU16(PyObject* obj);
+JIT_RUNTIME_API uint8_t JITRT_UnboxU8(PyObject* obj);
+JIT_RUNTIME_API int64_t JITRT_UnboxI64(PyObject* obj);
+JIT_RUNTIME_API int32_t JITRT_UnboxI32(PyObject* obj);
+JIT_RUNTIME_API int16_t JITRT_UnboxI16(PyObject* obj);
+JIT_RUNTIME_API int8_t JITRT_UnboxI8(PyObject* obj);
 
 /*
  * Calls __builtins__.__import__(), with a fast-path if this hasn't been
@@ -427,7 +431,7 @@ int8_t JITRT_UnboxI8(PyObject* obj);
  * This is a near verbatim copy of import_name() from ceval.c with minor
  * tweaks. We copy rather than expose to avoid making changes to ceval.c.
  */
-PyObject* JITRT_ImportName(
+JIT_RUNTIME_API PyObject* JITRT_ImportName(
     PyThreadState* tstate,
     PyObject* name,
     PyObject* fromlist,
@@ -436,7 +440,7 @@ PyObject* JITRT_ImportName(
 /*
  * Formats a f-string value
  */
-PyObject* JITRT_FormatValue(
+JIT_RUNTIME_API PyObject* JITRT_FormatValue(
     PyThreadState* tstate,
     PyObject* fmt_spec,
     PyObject* value,
@@ -444,7 +448,7 @@ PyObject* JITRT_FormatValue(
 /*
  * Concatenate strings from args
  */
-PyObject* JITRT_BuildString(
+JIT_RUNTIME_API PyObject* JITRT_BuildString(
     void* /*unused*/,
     PyObject** args,
     size_t nargsf,
@@ -456,21 +460,21 @@ PyObject* JITRT_BuildString(
  * There is a variant for each of the different types of generator: iterators,
  * coroutines, and async generators.
  */
-PyObject* JITRT_MakeGenObject(
+JIT_RUNTIME_API PyObject* JITRT_MakeGenObject(
     PyThreadState* tstate,
     GenResumeFunc resume_entry,
     size_t spill_words,
     jit::CodeRuntime* code_rt,
     PyCodeObject* code);
 
-PyObject* JITRT_MakeGenObjectAsyncGen(
+JIT_RUNTIME_API PyObject* JITRT_MakeGenObjectAsyncGen(
     PyThreadState* tstate,
     GenResumeFunc resume_entry,
     size_t spill_words,
     jit::CodeRuntime* code_rt,
     PyCodeObject* code);
 
-PyObject* JITRT_MakeGenObjectCoro(
+JIT_RUNTIME_API PyObject* JITRT_MakeGenObjectCoro(
     PyThreadState* tstate,
     GenResumeFunc resume_entry,
     size_t spill_words,
@@ -480,7 +484,7 @@ PyObject* JITRT_MakeGenObjectCoro(
 
 // Set the awaiter of the given awaitable to be the coroutine at the top of
 // `ts`.
-void JITRT_SetCurrentAwaiter(PyObject* awaitable, PyThreadState* ts);
+JIT_RUNTIME_API void JITRT_SetCurrentAwaiter(PyObject* awaitable, PyThreadState* ts);
 
 // Mostly the same implementation as YIELD_FROM in ceval.c with slight tweaks to
 // make it stand alone. The argument 'v' is stolen.
@@ -492,7 +496,7 @@ struct JITRT_GenSendRes {
   PyObject* retval;
   uint64_t done;
 };
-JITRT_GenSendRes JITRT_GenSend(
+JIT_RUNTIME_API JITRT_GenSendRes JITRT_GenSend(
     PyObject* gen,
     PyObject* v,
     uint64_t finish_yield_from
@@ -509,7 +513,7 @@ JITRT_GenSendRes JITRT_GenSend(
 // PyExc_StopAsyncIteration has been raised. In such cases the function clears
 // the error and returns a sentinel value indicating that iteration has
 // finished.
-JITRT_GenSendRes JITRT_GenSendHandleStopAsyncIteration(
+JIT_RUNTIME_API JITRT_GenSendRes JITRT_GenSendHandleStopAsyncIteration(
     PyObject* gen,
     PyObject* v,
     uint64_t finish_yield_from
@@ -522,7 +526,7 @@ JITRT_GenSendRes JITRT_GenSendHandleStopAsyncIteration(
 /* Unpack a sequence as in unpack_iterable(), and save the
  * results in a tuple.
  */
-PyObject* JITRT_UnpackExToTuple(
+JIT_RUNTIME_API PyObject* JITRT_UnpackExToTuple(
     PyThreadState* tstate,
     PyObject* iterable,
     int before,
@@ -539,16 +543,16 @@ PyObject* JITRT_UnpackExToTuple(
  * The function object is obtained from args[0] since in the static calling
  * convention the function is always the first argument.
  */
-JITRT_StaticCallReturn JITRT_FailedDeferredCompileShim(PyObject** args);
+JIT_RUNTIME_API JITRT_StaticCallReturn JITRT_FailedDeferredCompileShim(PyObject** args);
 
-JITRT_StaticCallReturn JITRT_CallStaticallyWithPrimitiveSignature(
+JIT_RUNTIME_API JITRT_StaticCallReturn JITRT_CallStaticallyWithPrimitiveSignature(
     PyFunctionObject* func,
     PyObject** args,
     size_t nargsf,
     PyObject* kwnames,
     _PyTypedArgsInfo* arg_info);
 
-JITRT_StaticCallFPReturn JITRT_CallStaticallyWithPrimitiveSignatureFP(
+JIT_RUNTIME_API JITRT_StaticCallFPReturn JITRT_CallStaticallyWithPrimitiveSignatureFP(
     PyFunctionObject* func,
     PyObject** args,
     size_t nargsf,
@@ -559,29 +563,29 @@ JITRT_StaticCallFPReturn JITRT_CallStaticallyWithPrimitiveSignatureFP(
  * At least one of the objects has to be exactly a unicode
  * object.
  */
-int JITRT_UnicodeEquals(PyObject* s1, PyObject* s2, int equals);
+JIT_RUNTIME_API int JITRT_UnicodeEquals(PyObject* s1, PyObject* s2, int equals);
 
 /* Return Py_True if needle is in haystack else return Py_False. Return nullptr
  * with exception raised on error. */
-PyObject* JITRT_SequenceContains(PyObject* haystack, PyObject* needle);
+JIT_RUNTIME_API PyObject* JITRT_SequenceContains(PyObject* haystack, PyObject* needle);
 
 /* Return Py_True if needle is not in haystack else return Py_False. Return
  * nullptr with exception raised on error. */
-PyObject* JITRT_SequenceNotContains(PyObject* haystack, PyObject* needle);
+JIT_RUNTIME_API PyObject* JITRT_SequenceNotContains(PyObject* haystack, PyObject* needle);
 
 /* Inverse form of PySequence_Contains for "not in"
  */
-int JITRT_NotContainsBool(PyObject* w, PyObject* v);
+JIT_RUNTIME_API int JITRT_NotContainsBool(PyObject* w, PyObject* v);
 
 /* Perform a rich comparison with integer result.  This wraps
    PyObject_RichCompare(), returning -1 for error, 0 for false, 1 for true.
    Unlike PyObject_RichCompareBool this doesn't perform an object equality
    check, which is incompatible w/ float comparisons. */
 
-int JITRT_RichCompareBool(PyObject* v, PyObject* w, int op);
+JIT_RUNTIME_API int JITRT_RichCompareBool(PyObject* v, PyObject* w, int op);
 
 /* perform a batch decref to the objects in args */
-void JITRT_BatchDecref(PyObject** args, int nargs);
+JIT_RUNTIME_API void JITRT_BatchDecref(PyObject** args, int nargs);
 
 /* Check that `i` is within the bounds of `seq`.
  *
@@ -591,12 +595,12 @@ void JITRT_BatchDecref(PyObject** args, int nargs);
  * Returns 0-based index that `i` refers to on success.
  * Returns -1 and raises IndexError on error.
  **/
-Py_ssize_t JITRT_CheckSequenceBounds(PyObject* seq, Py_ssize_t i);
+JIT_RUNTIME_API Py_ssize_t JITRT_CheckSequenceBounds(PyObject* seq, Py_ssize_t i);
 
 /* Call obj.__len__(). Return LongExact on success or NULL with an exception
  * set if there was an error. */
-PyObject* JITRT_GetLength(PyObject* obj);
-int64_t JITRT_GetLengthInt64(PyObject* obj);
+JIT_RUNTIME_API PyObject* JITRT_GetLength(PyObject* obj);
+JIT_RUNTIME_API int64_t JITRT_GetLengthInt64(PyObject* obj);
 
 /* Call match_keys() in ceval.c
  * NOTE: This function is here as a wrapper around the private match_keys
@@ -606,8 +610,8 @@ PyObject*
 JITRT_MatchKeys(PyThreadState* tstate, PyObject* subject, PyObject* keys);
 
 /* Used by DICT_UPDATE and DICT_MERGE implementations. */
-int JITRT_DictUpdate(PyThreadState* tstate, PyObject* dict, PyObject* update);
-int JITRT_DictMerge(
+JIT_RUNTIME_API int JITRT_DictUpdate(PyThreadState* tstate, PyObject* dict, PyObject* update);
+JIT_RUNTIME_API int JITRT_DictMerge(
     PyThreadState* tstate,
     PyObject* dict,
     PyObject* update,
@@ -615,36 +619,36 @@ int JITRT_DictMerge(
 
 /* Returns nullptr on error and an exact dict otherwise. Used by
  * COPY_DICT_WITHOUT_KEYS implementation. */
-PyObject* JITRT_CopyDictWithoutKeys(PyObject* subject, PyObject* keys);
+JIT_RUNTIME_API PyObject* JITRT_CopyDictWithoutKeys(PyObject* subject, PyObject* keys);
 
 /* Load a name from a Python thread's code object.
  */
-PyObject* JITRT_LoadName(PyThreadState* tstate, int name_idx);
+JIT_RUNTIME_API PyObject* JITRT_LoadName(PyThreadState* tstate, int name_idx);
 
 /* Reimplements the format_awaitable_error() function from the CPython
  * interpreter loop. */
-void JITRT_FormatAwaitableError(
+JIT_RUNTIME_API void JITRT_FormatAwaitableError(
     PyThreadState* tstate,
     PyTypeObject* type,
     bool is_aenter);
 
-void JITRT_IncRefTotal();
-void JITRT_DecRefTotal();
+JIT_RUNTIME_API void JITRT_IncRefTotal();
+JIT_RUNTIME_API void JITRT_DecRefTotal();
 
 #if PY_VERSION_HEX >= 0x030C0000
-PyObject* JITRT_LookupAttrSpecial(
+JIT_RUNTIME_API PyObject* JITRT_LookupAttrSpecial(
     PyObject* obj,
     PyObject* attr,
     const char* failure_fmt_str);
 #endif
 
-LoadMethodResult JITRT_LoadSpecial(PyObject* self, int special_idx);
+JIT_RUNTIME_API LoadMethodResult JITRT_LoadSpecial(PyObject* self, int special_idx);
 
 #ifdef Py_GIL_DISABLED
 /*
  * Non-inline wrapper for _Py_qsbr_quiescent_state().
  */
-void JITRT_AtQuiescentState(PyThreadState* tstate);
+JIT_RUNTIME_API void JITRT_AtQuiescentState(PyThreadState* tstate);
 #endif
 
 #if PY_VERSION_HEX >= 0x030D0000
@@ -654,12 +658,12 @@ extern "C" {
 /*
  * Atomically load cell value with new reference (for LOAD_DEREF).
  */
-PyObject* JITRT_LoadCellItem(PyCellObject* cell);
+JIT_RUNTIME_API PyObject* JITRT_LoadCellItem(PyCellObject* cell);
 
 /*
  * Atomically swap cell value, returns old value for decref (for STORE_DEREF).
  */
-PyObject* JITRT_SwapCellItem(PyCellObject* cell, PyObject* new_value);
+JIT_RUNTIME_API PyObject* JITRT_SwapCellItem(PyCellObject* cell, PyObject* new_value);
 }
 
 #endif
@@ -674,4 +678,4 @@ extern PyObject JITRT_IterDoneSentinel;
  * Invoke __next__ on iterator.
  * Returns the next value, or JITRT_IterDoneSentinel if the iterator is done.
  */
-PyObject* JITRT_InvokeIterNext(PyObject* iterator);
+JIT_RUNTIME_API PyObject* JITRT_InvokeIterNext(PyObject* iterator);
