@@ -21,6 +21,15 @@
 - 运行时辅助函数不被 LTO 内联
 - 基础功能测试通过
 
+### Phase 1 Plans
+
+**Plans:** 3 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — JIT Runtime Function Protection (mark JITRT_* functions noinline)
+- [ ] 01-02-PLAN.md — Build System Improvements (PGO workload, toolchain checks, macOS graceful degradation)
+- [ ] 01-03-PLAN.md — Integration Testing (LTO regression test suite)
+
 ### Phase 1 任务分解
 
 #### Task 1.1: 标记 JIT 运行时函数 [P0]
