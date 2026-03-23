@@ -79,44 +79,45 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SHARED_FLAGS}")
 option(ENABLE_LTO "Enable Link-Time Optimization (full)" OFF)
 
 if(ENABLE_LTO)
-  # Only support Linux
+  # macOS: Gracefully disable LTO (not supported)
   if(MACOS)
-    message(FATAL_ERROR "LTO is only supported on Linux")
-  endif()
-
-  message(STATUS "LTO: Enabled (full LTO)")
-
-  # Detect compiler type
-  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    set(USING_CLANG TRUE)
-  elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    set(USING_GCC TRUE)
+    message(STATUS "LTO: Disabled on macOS (not supported)")
+    set(ENABLE_LTO OFF)
   else()
-    message(FATAL_ERROR "LTO is only supported with Clang or GCC compilers")
-  endif()
+    message(STATUS "LTO: Enabled (full LTO)")
 
-  # For Clang, we need llvm-ar instead of regular ar
-  if(USING_CLANG)
-    find_program(LLVM_AR llvm-ar)
-    if(NOT LLVM_AR)
-      message(FATAL_ERROR "llvm-ar is required for LTO with Clang but was not found")
+    # Detect compiler type
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      set(USING_CLANG TRUE)
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+      set(USING_GCC TRUE)
+    else()
+      message(FATAL_ERROR "LTO is only supported with Clang or GCC compilers")
     endif()
-    set(CMAKE_AR ${LLVM_AR})
-    message(STATUS "LTO: Using llvm-ar: ${CMAKE_AR}")
 
-    set(LTO_FLAG "-flto")
-    set(LTO_LINKER_FLAGS "-flto")
-  elseif(USING_GCC)
-    set(LTO_FLAG "-flto")
-    set(LTO_LINKER_FLAGS "-flto -fuse-linker-plugin -ffat-lto-objects")
+    # For Clang, we need llvm-ar instead of regular ar
+    if(USING_CLANG)
+      find_program(LLVM_AR llvm-ar)
+      if(NOT LLVM_AR)
+        message(FATAL_ERROR "llvm-ar is required for LTO with Clang but was not found")
+      endif()
+      set(CMAKE_AR ${LLVM_AR})
+      message(STATUS "LTO: Using llvm-ar: ${CMAKE_AR}")
+
+      set(LTO_FLAG "-flto")
+      set(LTO_LINKER_FLAGS "-flto")
+    elseif(USING_GCC)
+      set(LTO_FLAG "-flto")
+      set(LTO_LINKER_FLAGS "-flto -fuse-linker-plugin -ffat-lto-objects")
+    endif()
+
+    # Apply flags to all C and C++ compilation
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${LTO_FLAG}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${LTO_FLAG}")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${LTO_LINKER_FLAGS}")
+    set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${LTO_LINKER_FLAGS}")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${LTO_LINKER_FLAGS}")
   endif()
-
-  # Apply flags to all C and C++ compilation
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${LTO_FLAG}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${LTO_FLAG}")
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${LTO_LINKER_FLAGS}")
-  set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${LTO_LINKER_FLAGS}")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${LTO_LINKER_FLAGS}")
 endif()
 
 ##############################################################################
