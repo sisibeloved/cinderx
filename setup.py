@@ -523,6 +523,14 @@ class BuildExt(build_ext):
         # LTO configuration
         enable_lto = is_env_flag_enabled("CINDERX_ENABLE_LTO")
         if enable_lto:
+            # Detect compiler type and validate toolchain
+            cc = os.environ.get("CC", "gcc")
+            if "clang" in cc:
+                compiler_type = "clang"
+            else:
+                compiler_type = "gcc"
+            check_lto_toolchain(compiler_type)
+
             cmake_args.append("-DENABLE_LTO=ON")
             print("Building with LTO enabled (full LTO)")
         else:
