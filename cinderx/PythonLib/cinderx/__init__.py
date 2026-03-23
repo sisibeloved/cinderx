@@ -129,6 +129,13 @@ try:
         def is_lightweight_frames_enabled() -> bool:
             return False
 
+    try:
+        from _cinderx import is_lto_enabled
+    except ImportError:
+
+        def is_lto_enabled() -> bool:
+            return False
+
 except ImportError as e:
     if "undefined symbol:" in str(e):
         # If we're on a dev build report this as an error, otherwise muddle along with alternative definitions
@@ -163,6 +170,9 @@ except ImportError as e:
         return False
 
     def is_lightweight_frames_enabled() -> bool:
+        return False
+
+    def is_lto_enabled() -> bool:
         return False
 
     from asyncio import AbstractEventLoop, Future

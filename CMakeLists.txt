@@ -51,6 +51,7 @@ macro(set_flag VAR)
 endmacro()
 
 set_flag(ENABLE_ADAPTIVE_STATIC_PYTHON)
+set_flag(ENABLE_LTO)
 set_flag(ENABLE_STATIC_PYTHON)
 set_flag(ENABLE_DISASSEMBLER)
 set_flag(ENABLE_ELF_READER)
