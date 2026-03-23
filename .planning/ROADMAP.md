@@ -26,9 +26,9 @@
 **Plans:** 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — JIT Runtime Function Protection (mark JITRT_* functions noinline)
-- [ ] 01-02-PLAN.md — Build System Improvements (PGO workload, toolchain checks, macOS graceful degradation)
-- [ ] 01-03-PLAN.md — Integration Testing (LTO regression test suite)
+- [x] 01-01-PLAN.md — JIT Runtime Function Protection (mark JITRT_* functions noinline)
+- [x] 01-02-PLAN.md — Build System Improvements (PGO workload, toolchain checks, macOS graceful degradation)
+- [x] 01-03-PLAN.md — Integration Testing (LTO regression test suite)
 
 ### Phase 1 任务分解
 
