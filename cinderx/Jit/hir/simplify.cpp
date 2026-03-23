@@ -16,6 +16,7 @@
 #include "cinderx/Jit/hir/analysis.h"
 #include "cinderx/Jit/hir/clean_cfg.h"
 #include "cinderx/Jit/hir/copy_propagation.h"
+#include "cinderx/Jit/hir/escape_analysis.h"
 #include "cinderx/Jit/hir/pass.h"
 #include "cinderx/Jit/hir/printer.h"
 #include "cinderx/Jit/hir/type.h"
@@ -144,9 +145,6 @@ bool isGeneratorsTreeIterCode(BorrowedRef<PyCodeObject> code) {
     return false;
   }
 
-  // Debug output
-  fprintf(stderr, "[FILENAME_DEBUG] Checking code: qualname='%s', filename='%s'\n", qualname, filename);
-
   // Check for Tree.__iter__ in bm_generators or Node.__iter__ in __main__ (for testing)
   bool is_tree_iter =
       std::strcmp(qualname, "Tree.__iter__") == 0 &&
@@ -156,8 +154,6 @@ bool isGeneratorsTreeIterCode(BorrowedRef<PyCodeObject> code) {
       (std::strstr(filename, "dump_hir.py") != nullptr ||
        std::strstr(filename, "benchmark_recursive_generator.py") != nullptr ||
        std::strstr(filename, "profile_generator_phases.py") != nullptr);
-
-  fprintf(stderr, "[FILENAME_DEBUG] is_tree_iter=%d, is_node_iter=%d\n", is_tree_iter, is_node_iter);
 
   return is_tree_iter || is_node_iter;
 }
@@ -1084,7 +1080,6 @@ struct YieldFromProfileDumper {
 // Experimental: Inline yield-from for self.<attr> patterns
 // when enabled via PYTHONJIT_ARM_INLINE_YIELD_FROM
 Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
-  fprintf(stderr, "[SIMPLIFY_DEBUG] ========== simplifyYieldFrom CALLED ==========\n");
   yieldFromStats.total_calls++;
 
   // Always log this for debugging
@@ -1121,11 +1116,44 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
 
   Instr* iter_instr = iter->instr();
 
+  // Helper: Check if a register ultimately references self (LoadArg 0),
+  // possibly through Phi nodes or other instructions.
+  // This handles cases where self is stored in a Phi node.
+  // Use std::function for recursive lambda support
+  std::function<bool(Register*)> is_self_register = [&](Register* reg) -> bool {
+    if (reg == nullptr) return false;
+    Instr* instr = reg->instr();
+    if (instr == nullptr) return false;
+
+    // Direct LoadArg 0 = self
+    if (instr->IsLoadArg()) {
+      auto* load_arg = static_cast<const LoadArg*>(instr);
+      return load_arg->arg_idx() == 0;
+    }
+
+    // Phi node: check if all inputs reference self
+    if (instr->IsPhi()) {
+      auto* phi = static_cast<const Phi*>(instr);
+      for (size_t j = 0; j < phi->NumOperands(); j++) {
+        if (!is_self_register(phi->GetOperand(j))) {
+          return false;
+        }
+      }
+      return phi->NumOperands() > 0;  // True if all inputs are self
+    }
+
+    // For other instructions with inputs, check if the first input references self
+    // (e.g., Cast, BitCast, etc.)
+    if (instr->NumOperands() > 0) {
+      return is_self_register(instr->GetOperand(0));
+    }
+
+    return false;
+  };
+
   // Handle Phi node case - trace through the GetIter->LoadField chain
   if (iter_instr->IsPhi()) {
     auto* phi = static_cast<const Phi*>(iter_instr);
-    fprintf(stderr, "[PHI_DEBUG] iter is Phi node, checking %zu inputs\n",
-            phi->NumOperands());
     JIT_LOG("simplifyYieldFrom: iter is Phi node");
 
     // Track which inputs lead to self.left/right
@@ -1136,10 +1164,7 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
       Register* phi_input = phi->GetOperand(i);
       Instr* phi_input_instr = phi_input->instr();
 
-      fprintf(stderr, "[PHI_DEBUG] checking Phi input %zu: %s\n",
-              i, phi_input_instr->opname().data());
-      JIT_LOG(
-          "simplifyYieldFrom: checking Phi input {}", i);
+      JIT_LOG("simplifyYieldFrom: checking Phi input {}", i);
 
       Register* load_field_source = nullptr;
 
@@ -1189,19 +1214,10 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
       if (load_field_source) {
         auto* load_field = static_cast<const LoadField*>(load_field_source->instr());
         Register* receiver = load_field->receiver();
-        Instr* receiver_instr = receiver->instr();
 
-        fprintf(stderr, "[PHI_DEBUG] Found LoadField, receiver_id=%d, field=%s\n",
-                receiver->id(), load_field->name().c_str());
-
-        // Check if receiver is self (first argument, arg_idx == 0)
-        bool is_self = false;
-        if (receiver_instr->IsLoadArg()) {
-          auto* load_arg = static_cast<const LoadArg*>(receiver_instr);
-          is_self = (load_arg->arg_idx() == 0);
-          fprintf(stderr, "[PHI_DEBUG] Receiver is LoadArg, arg_idx=%d, is_self=%d\n",
-                  load_arg->arg_idx(), is_self);
-        }
+        // Check if receiver ultimately references self (LoadArg 0)
+        // This handles both direct LoadArg and Phi node cases
+        bool is_self = is_self_register(receiver);
 
         if (is_self) {  // self
           std::string current_field_name(load_field->name());
@@ -1210,16 +1226,12 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
               // First valid input
               field_name = current_field_name;
               found_valid_pattern = true;
-              fprintf(stderr, "[PHI_DEBUG] ✅ First valid input %zu: field=%s\n",
-                      i, field_name.c_str());
               JIT_LOG(
                   "simplifyYieldFrom: Phi input {} matches pattern! field={}",
                   i,
                   field_name);
             } else if (field_name != current_field_name) {
               // Inconsistent field names across inputs
-              fprintf(stderr, "[PHI_DEBUG] ❌ Inconsistent field names (%s vs %s)\n",
-                      field_name.c_str(), current_field_name.c_str());
               JIT_LOG(
                   "simplifyYieldFrom: inconsistent field names ({} vs {})",
                   field_name,
@@ -1233,7 +1245,6 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
       }
 
       // This input doesn't match the pattern
-      fprintf(stderr, "[PHI_DEBUG] ❌ Input %zu doesn't match pattern\n", i);
       JIT_LOG(
           "simplifyYieldFrom: Phi input {} doesn't match pattern", i);
       found_valid_pattern = false;
@@ -1241,12 +1252,25 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
     }
 
     if (found_valid_pattern) {
-      fprintf(stderr, "[PHI_DEBUG] ✅✅✅ SUCCESS! All Phi inputs match field=%s\n",
-              field_name.c_str());
       JIT_LOG(
           "simplifyYieldFrom: ✅ All Phi inputs match pattern! field={}",
           field_name);
       yieldFromStats.optimization_detected++;
+
+      // 检查逃逸级别
+      EscapeLevel escape = analyzeGeneratorEscape(iter_instr);
+      if (escape == EscapeLevel::kNoEscape) {
+        JIT_LOG(
+            "OPTIMIZE: Escape analysis says kNoEscape, emitting InlineIter for self.{} pattern",
+            field_name);
+        constexpr uint64_t kInlineIterStateSize = 288;
+        Register* state_size = env.func.env.AllocateRegister();
+        env.emitRawInstr<LoadConst>(
+            state_size, Type::fromCInt(kInlineIterStateSize, TCInt64));
+        return env.emit<InlineIter>(
+            send_value, iter, state_size, *instr->frameState());
+      }
+
       JIT_LOG("OPTIMIZE: Emitting OptimizedYieldFrom for self.{} pattern",
               field_name);
       Register* entry = env.func.env.AllocateRegister();
@@ -1350,6 +1374,22 @@ Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
       code_qualname,
       " attr=",
       attr_str);
+
+  // 检查逃逸级别，决定使用 InlineIter 还是 OptimizedYieldFrom
+  EscapeLevel escape = analyzeGeneratorEscape(iter_instr);
+  if (escape == EscapeLevel::kNoEscape) {
+    JIT_LOG(
+        "OPTIMIZE: Escape analysis says kNoEscape, emitting InlineIter for self.{} pattern",
+        attr_str);
+    // 使用 InlineIter 替代 OptimizedYieldFrom
+    // state_size = 288 bytes (state machine buffer size)
+    constexpr uint64_t kInlineIterStateSize = 288;
+    Register* state_size = env.func.env.AllocateRegister();
+    env.emitRawInstr<LoadConst>(
+        state_size, Type::fromCInt(kInlineIterStateSize, TCInt64));
+    return env.emit<InlineIter>(
+        send_value, iter, state_size, *instr->frameState());
+  }
 
   JIT_LOG("OPTIMIZE: Emitting OptimizedYieldFrom for self.{} pattern",
           attr_str);

@@ -332,6 +332,9 @@ MemoryEffects memoryEffects(const Instr& inst) {
 #else
       return commonEffects(inst, AAny);
 #endif
+    case Opcode::kInlineIter:
+      // 内联迭代器读写栈上状态机
+      return {true, AFuncArgs, {3, 1}, AAny};
     case Opcode::kYieldFromHandleStopAsyncIteration: {
       // In 3.10 YieldFrom's output is either the yielded value from the subiter
       // or the final result from a StopIteration, and is owned in either case.
@@ -551,6 +554,7 @@ bool hasArbitraryExecution(const Instr& inst) {
     case Opcode::kYieldAndYieldFrom:
     case Opcode::kYieldFrom:
     case Opcode::kOptimizedYieldFrom:
+    case Opcode::kInlineIter:
     case Opcode::kYieldFromHandleStopAsyncIteration:
     case Opcode::kYieldValue:
       return true;

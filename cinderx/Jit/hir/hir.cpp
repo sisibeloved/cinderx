@@ -529,6 +529,7 @@ bool Instr::isReplayable() const {
     case Opcode::kYieldAndYieldFrom:
     case Opcode::kYieldFrom:
     case Opcode::kOptimizedYieldFrom:
+    case Opcode::kInlineIter:
     case Opcode::kYieldFromHandleStopAsyncIteration:
     case Opcode::kYieldValue:
     case Opcode::kXDecref:
@@ -828,6 +829,7 @@ bool isPassthrough(const Instr& instr) {
     case Opcode::kYieldAndYieldFrom:
     case Opcode::kYieldFrom:
     case Opcode::kOptimizedYieldFrom:
+    case Opcode::kInlineIter:
     case Opcode::kYieldFromHandleStopAsyncIteration:
     case Opcode::kYieldValue:
       return false;

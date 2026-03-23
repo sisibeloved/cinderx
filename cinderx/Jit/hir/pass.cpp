@@ -220,6 +220,7 @@ Type outputType(
     case Opcode::kYieldAndYieldFrom:
     case Opcode::kYieldFrom:
     case Opcode::kOptimizedYieldFrom:
+    case Opcode::kInlineIter:
     case Opcode::kYieldFromHandleStopAsyncIteration:
     case Opcode::kYieldValue:
       return TObject;
