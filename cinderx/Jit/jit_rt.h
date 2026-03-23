@@ -55,7 +55,7 @@ JIT_RUNTIME_API PyThreadState* JITRT_AllocateAndLinkInterpreterFrame_Debug(
 JIT_RUNTIME_API PyThreadState* JITRT_AllocateAndLinkInterpreterFrame_Release(
     PyFunctionObject* func);
 
-std::pair<PyThreadState*, jit::GenDataFooter*>
+JIT_RUNTIME_API std::pair<PyThreadState*, jit::GenDataFooter*>
 JITRT_AllocateAndLinkGenAndInterpreterFrame(
     PyFunctionObject* func,
     uint64_t spill_words,
@@ -68,7 +68,7 @@ JIT_RUNTIME_API void JITRT_InitFrameCellVars(
     int nvars,
     PyThreadState* tstate);
 
-std::pair<jit::JitGenObject*, jit::GenDataFooter*>
+JIT_RUNTIME_API std::pair<jit::JitGenObject*, jit::GenDataFooter*>
 JITRT_UnlinkGenFrameAndReturnGenDataFooter(PyThreadState* tstate);
 
 #endif
@@ -164,7 +164,7 @@ JIT_RUNTIME_API JITRT_StaticCallFPReturn JITRT_ReportStaticArgTypecheckErrorsWit
  * Mimics the behavior of Cix_PyDict_LoadGlobal except that it raises an error
  * when the name does not exist.
  */
-PyObject*
+JIT_RUNTIME_API PyObject*
 JITRT_LoadGlobal(PyObject* globals, PyObject* builtins, PyObject* name);
 
 /*
@@ -215,13 +215,13 @@ JIT_RUNTIME_API PyObject* JITRT_DeepcopyTuplePostMiss(PyObject* x, PyObject* y);
  * pargs will be a possibly empty tuple of positional arguments, kwargs will be
  * null or a dictionary of keyword arguments.
  */
-PyObject*
+JIT_RUNTIME_API PyObject*
 JITRT_CallFunctionEx(PyObject* func, PyObject* pargs, PyObject* kwargs);
 
 /*
  * As JITRT_CallFunctionEx but eagerly starts coroutines.
  */
-PyObject*
+JIT_RUNTIME_API PyObject*
 JITRT_CallFunctionExAwaited(PyObject* func, PyObject* pargs, PyObject* kwargs);
 
 /*
@@ -606,7 +606,7 @@ JIT_RUNTIME_API int64_t JITRT_GetLengthInt64(PyObject* obj);
  * NOTE: This function is here as a wrapper around the private match_keys
  * function and should be removed when match_keys becomes public.
  */
-PyObject*
+JIT_RUNTIME_API PyObject*
 JITRT_MatchKeys(PyThreadState* tstate, PyObject* subject, PyObject* keys);
 
 /* Used by DICT_UPDATE and DICT_MERGE implementations. */

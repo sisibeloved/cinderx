@@ -875,7 +875,7 @@ JIT_RUNTIME_API void JITRT_UnlinkFrame([[maybe_unused]] bool unlink_shadow_frame
 #endif
 }
 
-PyObject*
+JIT_RUNTIME_API PyObject*
 JITRT_LoadGlobal(PyObject* globals, PyObject* builtins, PyObject* name) {
   PyObject* result = Cix_PyDict_LoadGlobal(
       (PyDictObject*)globals, (PyDictObject*)builtins, name);
@@ -1130,12 +1130,12 @@ call_function_ex(PyObject* func, PyObject* pargs, PyObject* kwargs) {
   return res;
 }
 
-PyObject*
+JIT_RUNTIME_API PyObject*
 JITRT_CallFunctionEx(PyObject* func, PyObject* pargs, PyObject* kwargs) {
   return call_function_ex<false>(func, pargs, kwargs);
 }
 
-PyObject*
+JIT_RUNTIME_API PyObject*
 JITRT_CallFunctionExAwaited(PyObject* func, PyObject* pargs, PyObject* kwargs) {
   return call_function_ex<true>(func, pargs, kwargs);
 }
