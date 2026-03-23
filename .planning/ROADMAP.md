@@ -182,6 +182,14 @@ python -m pytest cinderx/PythonLib/test_cinderx/test_oss_quick.py -v
 - LTO 回归测试套件就绪
 - 构建文档更新完成
 
+### Phase 2 Plans
+
+**Plans:** 2 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — LTO Detection API (cinderx.is_lto_enabled())
+- [ ] 02-02-PLAN.md — Build Documentation Update (README.md, docs/build.md)
+
 ### Phase 2 任务分解
 
 #### Task 2.1: LTO 状态检测 API [P1]
@@ -220,45 +228,18 @@ def is_lto_enabled():
 
 ---
 
-#### Task 2.2: LTO 回归测试套件 [P1]
+#### Task 2.2: LTO 回归测试套件 [P1] ✅
 
-**描述**: 创建专门的 LTO 回归测试
+**状态**: 已在 Phase 1 完成 (Plan 01-03)
 
-**具体工作**:
-```python
-# cinderx/PythonLib/test_cinderx/test_lto_regression.py
-import unittest
-import time
-import cinderx
-import cinderx.jit
+**文件**: `cinderx/PythonLib/test_cinderx/test_lto_regression.py`
 
-class TestLTOPerformance(unittest.TestCase):
-    def test_jit_compile_time_not_degraded(self):
-        """JIT 编译时间不应劣化超过 5%"""
-        # 基准测试代码
-        pass
-    
-    def test_runtime_helper_call_overhead(self):
-        """运行时辅助函数调用开销正常"""
-        pass
+**包含测试**:
+- `TestLTOSymbolIntegrity` - 验证 JITRT 符号未被内联
+- `TestLTOBasicFunctionality` - 验证基本功能
+- `TestLTOPerformanceBaseline` - 性能基线测试
 
-class TestLTOSymbols(unittest.TestCase):
-    def test_jitrt_functions_not_inlined(self):
-        """JITRT 函数不应被内联"""
-        import subprocess
-        result = subprocess.run(['nm', '-C', '_cinderx.so'], 
-                              capture_output=True, text=True)
-        self.assertIn('JITRT_ReCompileCached', result.stdout)
-        self.assertNotIn('JITRT_ReCompileCached.isra', result.stdout)
-```
-
-**验收标准**:
-- [ ] 测试编译时间回归
-- [ ] 测试运行时辅助函数调用
-- [ ] 测试符号表完整性
-- [ ] CI 集成
-
-**预计时间**: 3-5 天
+---
 
 ---
 
