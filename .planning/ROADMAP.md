@@ -187,8 +187,8 @@ python -m pytest cinderx/PythonLib/test_cinderx/test_oss_quick.py -v
 **Plans:** 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — LTO Detection API (cinderx.is_lto_enabled())
-- [ ] 02-02-PLAN.md — Build Documentation Update (README.md, docs/build.md)
+- [x] 02-01-PLAN.md — LTO Detection API (cinderx.is_lto_enabled())
+- [x] 02-02-PLAN.md — Build Documentation Update (README.md, docs/build.md)
 
 ### Phase 2 任务分解
 
@@ -427,9 +427,9 @@ lto-build:
 **日期**: 预计项目开始后 3-4 周
 
 **检查清单**:
-- [ ] Task 2.1: LTO 状态 API
-- [ ] Task 2.2: 回归测试套件
-- [ ] Task 2.3: 文档更新
+- [x] Task 2.1: LTO 状态 API
+- [x] Task 2.2: 回归测试套件
+- [x] Task 2.3: 文档更新
 
 **进入 Phase 3 条件**: 功能完整，测试覆盖充分
 
@@ -504,4 +504,4 @@ lto-build:
 
 *路线图版本: 1.0*  
 *创建日期: 2026-03-23*  
-*最后更新: 2026-03-23*
+*最后更新: 2026-03-23 (完成 Plan 02-01, 02-02)*
