@@ -255,24 +255,30 @@ class BuildCommand(build):
         else:
             workload_env["PYTHONPATH"] = cinderx_so_dir
 
-        # Uses the same default workload as CPython's PGO
+        # JIT-intensive workload for PGO training
         workload_cmd = [
             sys.executable,
             "-c",
             """
 import cinderx
+import cinderx.jit
+cinderx.jit.auto()
 
-import sys
-sys.argv.append("--pgo")
-
-def main():
-    # This import must not be in the module body as it will start the tests
-    # running, and those using multiprocessing will fail because the initial
-    # doesn't have "freeze support".
-    import test.__main__
-
-if __name__ == "__main__":
-    main()
+# Use pyperformance for JIT-intensive benchmarks
+try:
+    import pyperformance
+    pyperformance.run_suite([
+        'richards', 'nbody', 'deltablue',
+        'regex_compile', 'nqueens'
+    ])
+except ImportError:
+    print("Warning: pyperformance not found, using fallback workload")
+    # Fallback: simple JIT warmup
+    def fib(n):
+        if n < 2: return n
+        return fib(n-1) + fib(n-2)
+    for i in range(35):
+        fib(20)
             """,
         ]
 
@@ -413,6 +419,7 @@ class BuildPy(build_py):
         pth_dest = os.path.join(self.build_lib, "cinderx.pth")
         print(f"Copying .pth file to {pth_dest}")
         self.copy_file(pth_source, pth_dest, preserve_mode=False)
+
 
 class CMakeExtension(Extension):
     """
