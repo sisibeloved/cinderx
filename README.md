@@ -17,6 +17,8 @@ external users.  New releases are published to PyPI on a weekly basis.
   machine code
 - **Static Python** - A stricter form/subset of Python, for type safety and
   optimization
+- **Link-Time Optimization (LTO)** - Improved performance on Linux with
+  optional LTO and PGO build options (see [LTO section](#link-time-optimization-lto))
 
 The codebase includes other features as well, such as a parallel garbage
 collector and a lighter weight implementation of Python interpreter frames.
@@ -75,6 +77,54 @@ cinderx.jit.force_compile(foo)
 # Compile `bar` the next time it is called.
 cinderx.jit.lazy_compile(bar)
 ```
+
+## Link-Time Optimization (LTO)
+
+CinderX supports Link-Time Optimization (LTO) for improved performance on Linux.
+
+### Quick Start
+
+```bash
+CINDERX_ENABLE_LTO=1 pip install cinderx
+```
+
+### Check if LTO is enabled
+
+```python
+import cinderx
+
+if cinderx.is_lto_enabled():
+    print("LTO optimizations are active")
+```
+
+### Platform Support
+
+| Platform | Architecture | LTO Support |
+|----------|--------------|-------------|
+| Linux    | x86_64       | ✅ Full     |
+| Linux    | ARM64        | ✅ Full     |
+| macOS    | x86_64       | ❌ No       |
+| macOS    | ARM64        | ❌ No       |
+| Windows  | -            | ❌ No       |
+
+**Note**: LTO is disabled on macOS automatically. See [docs/build.md](docs/build.md) for details.
+
+### Requirements
+
+- GCC 13+ or Clang 18+
+- Linux x86_64 or ARM64
+- Toolchain: `llvm-ar`, `llvm-profdata` (Clang) or `gcc-ar` (GCC)
+
+### Profile-Guided Optimization (PGO)
+
+For maximum performance, enable both LTO and PGO:
+
+```bash
+CINDERX_ENABLE_LTO=1 CINDERX_ENABLE_PGO=1 pip install cinderx
+```
+
+PGO requires additional build time (approximately 15 minutes) but can provide
+3-10% performance improvement on benchmarks.
 
 ## CinderX vs Cinder
 
