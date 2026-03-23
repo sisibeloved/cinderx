@@ -34,6 +34,41 @@ PYTHON_LIB_DIR = "cinderx/PythonLib"
 MIN_GCC_VERSION = 13
 
 
+def check_lto_toolchain(compiler_type):
+    """Check that required LTO toolchain tools are available.
+
+    Args:
+        compiler_type: 'clang' or 'gcc'
+
+    Raises:
+        RuntimeError: If required tools are missing
+    """
+    if compiler_type == "clang":
+        required_tools = ["llvm-ar", "llvm-profdata"]
+        install_cmd = (
+            "apt-get install llvm (Debian/Ubuntu) or dnf install llvm (Fedora)"
+        )
+    elif compiler_type == "gcc":
+        required_tools = ["gcc-ar"]
+        install_cmd = (
+            "apt-get install binutils (Debian/Ubuntu) or dnf install binutils (Fedora)"
+        )
+    else:
+        raise RuntimeError(f"LTO not supported with compiler: {compiler_type}")
+
+    missing = []
+    for tool in required_tools:
+        if not shutil.which(tool):
+            missing.append(tool)
+
+    if missing:
+        raise RuntimeError(
+            f"LTO requires the following tools which were not found: {', '.join(missing)}\n"
+            f"Please install: {install_cmd}\n"
+            f"Or disable LTO: CINDERX_ENABLE_LTO=0 python setup.py install"
+        )
+
+
 def compute_package_version() -> str:
     """
     Compute a date-based version string.  Uses the UTC timezone for consistency.
