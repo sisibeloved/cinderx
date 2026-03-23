@@ -1,0 +1,25 @@
+{
+  "mode": "interactive",
+  "granularity": "fine",
+  "project_name": "CinderX LTO/PGO 性能修复",
+  "project_description": "系统化修复CinderX JIT编译器在开启LTO/PGO时的性能劣化问题",
+  "language": "zh-CN",
+  "git": {
+    "branching_strategy": "phase",
+    "commit_docs": true
+  },
+  "models": {
+    "planning": "sonnet",
+    "execution": "sonnet",
+    "verification": "sonnet"
+  },
+  "workflow": {
+    "research": true,
+    "plan_check": true,
+    "verifier": true,
+    "auto_advance": false,
+    "skip_discuss": false
+  },
+  "created_at": "2026-03-23T20:30:00Z",
+  "created_by": "gsd-new-project"
+}
