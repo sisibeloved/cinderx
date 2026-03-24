@@ -19,12 +19,21 @@ if ls "$PROJECT_ROOT"/dist/$WHEEL_PATTERN 1> /dev/null 2>&1; then
   echo "Found existing wheel:"
   ls -lh "$PROJECT_ROOT"/dist/$WHEEL_PATTERN
   echo ""
-  read -p "Rebuild? (y/N) " -n 1 -r
-  echo
-  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Using existing wheel"
-    exit 0
+
+  # In non-interactive mode, automatically rebuild
+  if [[ -t 0 ]]; then
+    # Interactive mode - ask user
+    read -p "Rebuild? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      echo "Using existing wheel"
+      exit 0
+    fi
+  else
+    # Non-interactive mode - auto rebuild
+    echo "Auto-rebuilding (non-interactive mode)..."
   fi
+
   # Remove old wheel
   rm -f "$PROJECT_ROOT"/dist/$WHEEL_PATTERN
 fi
