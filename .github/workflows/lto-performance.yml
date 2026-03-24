@@ -1,0 +1,224 @@
+name: LTO Performance Validation
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'cinderx/Jit/**'
+      - 'cinderx/**/jit_rt.*'
+      - 'CMakeLists.txt'
+      - 'setup.py'
+      - 'scripts/bench/**'
+      - '.github/workflows/lto-performance.yml'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'cinderx/Jit/**'
+      - 'cinderx/**/jit_rt.*'
+      - 'CMakeLists.txt'
+      - 'setup.py'
+      - 'scripts/bench/**'
+
+env:
+  REGRESSION_THRESHOLD_PCT: 1.0
+  BUILD_TIME_THRESHOLD_PCT: 30.0
+  TARGET_IMPROVEMENT_PCT: 5.0
+
+jobs:
+  # Quick validation job (runs on standard Ubuntu)
+  lto-quick-validate:
+    name: Quick LTO Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.3'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyperformance numpy psutil
+
+      - name: Build baseline (no LTO)
+        run: |
+          echo "Building CinderX without LTO..."
+          CINDERX_ENABLE_LTO=0 CINDERX_ENABLE_PGO=0 \
+            python setup.py build_ext --inplace 2>&1 | tee build-baseline.log
+
+      - name: Run quick benchmark (baseline)
+        run: |
+          python scripts/bench/run_pyperf_subset.py \
+            --iterations 3 \
+            --fast \
+            --output results/baseline-quick.json
+
+      - name: Build with LTO
+        run: |
+          echo "Building CinderX with LTO..."
+          rm -rf build *.so
+          CINDERX_ENABLE_LTO=1 CINDERX_ENABLE_PGO=0 \
+            python setup.py build_ext --inplace 2>&1 | tee build-lto.log
+
+      - name: Run quick benchmark (LTO)
+        run: |
+          python scripts/bench/run_pyperf_subset.py \
+            --iterations 3 \
+            --fast \
+            --output results/lto-quick.json
+
+      - name: Compare results
+        id: compare
+        run: |
+          python scripts/bench/compare_lto_impact.py \
+            --baseline results/baseline-quick.json \
+            --lto results/lto-quick.json \
+            --threshold ${{ env.REGRESSION_THRESHOLD_PCT }} \
+            --output results/comparison-report.md \
+            --json results/comparison.json
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: lto-quick-results
+          path: results/
+          retention-days: 30
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('results/comparison-report.md', 'utf8');
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '## LTO Performance Results\n\n' + report
+            });
+
+  # Full validation job (runs on ARM when available)
+  lto-full-validate:
+    name: Full LTO Validation (ARM64)
+    runs-on: ubuntu-latest  # TODO: Switch to ARM runner when available
+    timeout-minutes: 120
+    needs: lto-quick-validate
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up QEMU for ARM64 emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ARM64 Docker image
+        run: |
+          docker build -f docker/Dockerfile.arm -t cinderx-arm:latest .
+
+      - name: Run full validation in container
+        run: |
+          docker run --rm \
+            -v $(pwd):/workspace \
+            -e CINDERX_ENABLE_LTO=1 \
+            cinderx-arm:latest \
+            bash -c "
+              echo 'Running full benchmark suite...'
+              /workspace/docker/arm/scripts/build-lto.sh --output /workspace/results/
+              /workspace/docker/arm/scripts/run-full-suite.sh --output /workspace/results/
+            "
+
+      - name: Upload full results
+        uses: actions/upload-artifact@v4
+        with:
+          name: lto-full-results
+          path: results/
+          retention-days: 90
+
+      - name: Check for regressions
+        run: |
+          if [ -f results/comparison.json ]; then
+            REGRESSIONS=$(jq '.regressions | length' results/comparison.json)
+            if [ "$REGRESSIONS" -gt 0 ]; then
+              echo "ERROR: $REGRESSIONS regression(s) detected"
+              exit 1
+            fi
+          fi
+
+  # Build time validation
+  lto-build-time:
+    name: LTO Build Time Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.3'
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential llvm-ar llvm-profdata
+          python -m pip install --upgrade pip
+
+      - name: Time baseline build
+        run: |
+          echo "Building baseline (no LTO)..."
+          /usr/bin/time -f "%e" -o build-time-baseline.txt \
+            bash -c 'CINDERX_ENABLE_LTO=0 python setup.py build_ext --inplace'
+
+      - name: Time LTO build
+        run: |
+          rm -rf build *.so
+          echo "Building with LTO..."
+          /usr/bin/time -f "%e" -o build-time-lto.txt \
+            bash -c 'CINDERX_ENABLE_LTO=1 python setup.py build_ext --inplace'
+
+      - name: Calculate build time increase
+        run: |
+          BASELINE=$(cat build-time-baseline.txt)
+          LTO=$(cat build-time-lto.txt)
+          INCREASE=$(python3 -c "print((($LTO / $BASELINE) - 1) * 100)")
+          
+          echo "Baseline build time: ${BASELINE}s"
+          echo "LTO build time: ${LTO}s"
+          echo "Increase: ${INCREASE}%"
+          
+          # Save for artifact
+          cat > build-time-report.json <<EOF
+          {
+            "baseline_seconds": $BASELINE,
+            "lto_seconds": $LTO,
+            "increase_percent": $INCREASE,
+            "threshold_percent": ${{ env.BUILD_TIME_THRESHOLD_PCT }},
+            "passed": $(python3 -c "print(1 if $INCREASE <= 30 else 0)")
+          }
+          EOF
+          
+          # Check threshold
+          if (( $(echo "$INCREASE > ${{ env.BUILD_TIME_THRESHOLD_PCT }}" | bc -l) )); then
+            echo "ERROR: Build time increase ($INCREASE%) exceeds threshold (${{ env.BUILD_TIME_THRESHOLD_PCT }}%)"
+            exit 1
+          fi
+
+      - name: Upload build time report
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-time-report
+          path: build-time-report.json
