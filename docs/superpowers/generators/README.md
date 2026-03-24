@@ -2,9 +2,11 @@
 
 **目标**: 消除 CinderX JIT 编译递归生成器（Tree.__iter__ 模式）中的性能回退
 
-**当前状态**: Phase 2 状态机生成进行中 - Week 1 基础设施完成 ✅
+**当前状态**: Phase 2 Week 1 完成 ✅ | Week 2 进行中 🚧
 
-**最新进展**: Phase 2 Week 1 完成，新增 StateSwitch/SaveState/LoadState/YieldFromInline HIR 指令
+**最新进展**:
+- ✅ Week 1: 完成 4个新HIR指令 + GenDataFooter扩展 (2026-03-24)
+- 🚧 Week 2: 状态机生成器实施中（5个任务，~7天）
 
 ---
 
