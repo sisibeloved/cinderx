@@ -29,6 +29,7 @@
 #include "cinderx/Jit/hir/simplify.h"
 #include "cinderx/Jit/hir/slot_version_guard_elimination.h"
 #include "cinderx/Jit/hir/ssa.h"
+#include "cinderx/Jit/hir/tree_iter_state_machine_pass.h"
 #include "cinderx/Jit/jit_time_log.h"
 
 #include <chrono>
@@ -128,6 +129,9 @@ void Compiler::runPasses(
   runPassIf(hir::DeadCodeElimination{}, PassConfig::kDeadCodeElim);
   runPassIf(hir::CleanCFG{}, PassConfig::kCleanCFG);
 
+  // Run tree iter state machine pass after cleanup passes
+  runPassIf(hir::TreeIterStateMachinePass{}, PassConfig::kTreeIterStateMachine);
+
   runPass(jit::hir::RefcountInsertion{}, irfunc, callback);
   runPass(jit::hir::ListSliceCleanup{}, irfunc, callback);
   runPass(jit::hir::FloatCompareElimination{}, irfunc, callback);
@@ -183,6 +187,7 @@ PassConfig createConfig() {
   set(hir_opts.insert_update_prev_instr, PassConfig::kInsertUpdatePrevInstr);
   set(hir_opts.phi_elim, PassConfig::kPhiElim);
   set(hir_opts.simplify, PassConfig::kSimplify);
+  set(hir_opts.tree_iter_state_machine, PassConfig::kTreeIterStateMachine);
 
   return static_cast<PassConfig>(result);
 }
