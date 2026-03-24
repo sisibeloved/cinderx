@@ -14,6 +14,12 @@
 
 namespace jit::codegen {
 
+#if PY_VERSION_HEX >= 0x030C0000 && defined(CINDER_AARCH64)
+int32_t getThreadStateOffsetFromAArch64Instrs(
+    const uint32_t* ts_func,
+    size_t max_instructions);
+#endif
+
 class FrameAsm {
  public:
   FrameAsm(const hir::Function* func, Environ& env) : func_(func), env_(env) {}

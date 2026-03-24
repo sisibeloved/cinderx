@@ -60,6 +60,57 @@ CINDER_UNSUPPORTED
 bool tstate_offset_inited;
 int32_t tstate_offset = -1;
 
+#if defined(CINDER_AARCH64)
+int32_t getThreadStateOffsetFromAArch64Instrs(
+    const uint32_t* ts_func,
+    size_t max_instructions) {
+  if (max_instructions < 3) {
+    return -1;
+  }
+
+  size_t scan_start = 0;
+  uint32_t reg = 0;
+  bool matched = false;
+
+  if (ts_func[0] == 0xa9bf7bfd && // stp x29, x30, [sp, #-16]!
+      ts_func[1] == 0x910003fd && // mov x29, sp
+      ((ts_func[2] & ~0x1f) == 0xd53bd040) // mrs x?, tpidr_el0
+  ) {
+    reg = ts_func[2] & 0x1f;
+    scan_start = 3;
+    matched = true;
+  } else if ((ts_func[0] & ~0x1f) == 0xd53bd040) { // mrs x?, tpidr_el0
+    reg = ts_func[0] & 0x1f;
+    scan_start = 1;
+    matched = true;
+  }
+
+  if (!matched) {
+    return -1;
+  }
+
+  int32_t current_offset = 0;
+  for (size_t index = scan_start; index < max_instructions; index++) {
+    if (ts_func[index] == (0xf9400000 | (reg << 5))) {
+      // ldr x0, [x?]
+      return current_offset;
+    } else if (
+        (ts_func[index] & ~0x7ffc00) == (0x91000000 | (reg << 5) | reg)) {
+      // add x?, x?, #<imm>{, <shift>}
+      uint32_t imm = (ts_func[index] >> 10) & 0xfff;
+      if (ts_func[index] & (1 << 22)) {
+        imm <<= 12;
+      }
+      current_offset += imm;
+    } else {
+      return -1;
+    }
+  }
+
+  return -1;
+}
+#endif
+
 void initThreadStateOffset() {
   if (tstate_offset_inited) {
     return;
@@ -91,66 +142,7 @@ void initThreadStateOffset() {
   // stored at. So verify that we recognize what it's doing and pull
   // out that offset.
   uint32_t* ts_func = reinterpret_cast<uint32_t*>(&_PyThreadState_GetCurrent);
-
-  size_t scan_start = 0;
-  uint32_t reg = 0;
-  bool matched = false;
-
-  if (ts_func[0] == 0xa9bf7bfd && // stp x29, x30, [sp, #-16]!
-      ts_func[1] == 0x910003fd && // mov x29, sp
-      ((ts_func[2] & ~0x1f) == 0xd53bd040) // mrs x?, tpidr_el0
-  ) {
-    // Here we know we are loading the thread local base offset into some
-    // register, based on the mrs instruction.
-    reg = ts_func[2] & 0x1f;
-    scan_start = 3;
-    matched = true;
-  } else if ((ts_func[0] & ~0x1f) == 0xd53bd040) { // mrs x?, tpidr_el0 (no prologue)
-    reg = ts_func[0] & 0x1f;
-    scan_start = 1;
-    matched = true;
-  } 
-
-  if (matched) {
-    int32_t current_offset = 0;
-    // Now, we will interpret any subsequent add instructions in order to
-    // determine the offset. We will know we are done when we hit an ldr x0, or
-    // we hit something unknown and need to break.
-    for (size_t index = scan_start;; index++) {
-      if (ts_func[index] == (0xf9400000 | (reg << 5))) {
-        // ldr x0, [x?]
-        //
-        // Here we are loading the temporarily calculated offset into x0, which
-        // is the return register. At this point we are done.
-        break;
-      } else if (
-          (ts_func[index] & ~0x7ffc00) == (0x91000000 | (reg << 5) | reg)) {
-        // add x?, x?, #<imm>{, <shift>}
-        //
-        // Here we are adding to the temporary offset register. It is encoded
-        // as: 100100010<shift><imm><rn><rd>, where shift is 1 bit, imm is 12
-        // bits, rn and rd are both 5 bits, which should be equivalent to reg.
-        uint32_t imm = (ts_func[index] >> 10) & 0xfff;
-        if (ts_func[index] & (1 << 22)) {
-          imm <<= 12;
-        }
-
-        current_offset += imm;
-      } else {
-        // Otherwise, we found something we did not anticipate, so we need to
-        // bail out.
-        current_offset = -1;
-        break;
-      }
-    }
-
-    tstate_offset = current_offset;
-  }
-#ifndef Py_DEBUG
-  if (tstate_offset == -1) {
-    assert(false);
-  }
-#endif
+  tstate_offset = getThreadStateOffsetFromAArch64Instrs(ts_func, 16);
 #else
   CINDER_UNSUPPORTED
 #endif

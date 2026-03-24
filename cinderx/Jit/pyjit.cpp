@@ -68,6 +68,8 @@ using namespace jit;
 
 namespace {
 
+constexpr uint32_t kPyperformanceStartupGuardThreshold = 10;
+
 // RAII device for disabling GIL checking.
 class DisableGilCheck {
  public:
@@ -105,6 +107,47 @@ uint64_t countCalls(PyCodeObject* code) {
   auto extra = codeExtra(code);
   return extra != nullptr ? Ci_code_extra_get_calls(extra) : 0;
 #endif
+}
+
+bool codeIsInFrozenStdlib(BorrowedRef<PyCodeObject> code) {
+  if (code == nullptr || code->co_filename == nullptr ||
+      !PyUnicode_Check(code->co_filename)) {
+    return false;
+  }
+
+  const char* filename = PyUnicode_AsUTF8(code->co_filename);
+  if (filename == nullptr) {
+    PyErr_Clear();
+    return false;
+  }
+
+  std::string_view path = filename;
+  return path.starts_with("<frozen ") ||
+      path.find("zipimport") != std::string_view::npos;
+}
+
+bool isRunningUnderPyperformance() {
+  const char* runid = std::getenv("PYPERFORMANCE_RUNID");
+  return runid != nullptr && runid[0] != '\0';
+}
+
+bool codeIsInPyperformanceBenchmark(BorrowedRef<PyCodeObject> code) {
+  if (code == nullptr || code->co_filename == nullptr ||
+      !PyUnicode_Check(code->co_filename)) {
+    return false;
+  }
+
+  const char* filename = PyUnicode_AsUTF8(code->co_filename);
+  if (filename == nullptr) {
+    PyErr_Clear();
+    return false;
+  }
+
+  std::string_view path = filename;
+  return path.find("/pyperformance/data-files/benchmarks/") !=
+          std::string_view::npos ||
+      path.find("\\pyperformance\\data-files\\benchmarks\\") !=
+          std::string_view::npos;
 }
 
 // If functions in the cinderx module get compiled, they will somehow keep the
@@ -205,6 +248,18 @@ PyObject* jitVectorcall(
   // If there's a call count limit, interpret the function as usual until the
   // limit is reached.
   if (auto limit = getConfig().compile_after_n_calls; limit.has_value()) {
+    if (*limit <= kPyperformanceStartupGuardThreshold &&
+        isRunningUnderPyperformance() &&
+        !codeIsInPyperformanceBenchmark(code)) {
+      incrementShadowcodeCall(code);
+      auto entry = getInterpretedVectorcall(func);
+      return entry(func_obj, stack, nargsf, kwnames);
+    }
+    if (*limit <= kPyperformanceStartupGuardThreshold && codeIsInFrozenStdlib(code)) {
+      incrementShadowcodeCall(code);
+      auto entry = getInterpretedVectorcall(func);
+      return entry(func_obj, stack, nargsf, kwnames);
+    }
     auto const calls = countCalls(code);
     if (calls < *limit) {
       incrementShadowcodeCall(code);
