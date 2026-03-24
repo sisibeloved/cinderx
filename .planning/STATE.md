@@ -2,9 +2,9 @@
 
 ## 当前状态概览
 
-**项目阶段**: Phase 3A Wave 1 已完成 ✅  
+**项目阶段**: Phase 3B Wave 2 已完成 ✅  
 **最后更新**: 2026-03-24  
-**下次更新**: Phase 3A Wave 2 执行
+**下次更新**: Phase 3C Wave 3 或 CI 集成
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -13,7 +13,8 @@
 │  Phase 3A Wave 1:     [██████████] 100% ✅ 已完成           │
 │    - Plan 03A-01: 5-benchmark automation                    │
 │    - Plan 03A-02: macOS smoke test                          │
-│  Phase 3B Wave 2:     [░░░░░░░░░░] 0%  ⏳ 等待中            │
+│  Phase 3B Wave 2:     [██████████] 100% ✅ 已完成           │
+│    - Plan 03B-01: Docker ARM environment                    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -94,6 +95,20 @@
 - ✅ < 30% build time increase threshold validation
 - ✅ One-command validation: `./scripts/bench/quick_validation.sh`
 
+### Phase 3B Wave 2: Docker ARM 验证 (2026-03-24)
+
+| 计划 | 描述 | 关键成果 |
+|------|------|----------|
+| 03B-01 | Docker ARM environment | `Dockerfile.arm` + `docker-compose.arm.yml` + scripts |
+
+**关键成果:**
+- ✅ ARM64 Docker environment with GCC 13/Clang 18 toolchain
+- ✅ 6 Docker Compose services (baseline, LTO, PGO, quick-bench, full-bench, validate)
+- ✅ Build comparison script with 30% threshold validation
+- ✅ Full pyperformance suite execution script
+- ✅ Resource limits: 4 CPU, 8GB memory for consistent benchmarking
+- ✅ PR-002, PR-003, PR-004 requirements met
+
 ---
 
 ## 下一步行动 🚀
@@ -152,9 +167,12 @@
 
 ### 低优先级（后续）
 
-- [ ] **TODO-03B-01**: Phase 3B Docker ARM 验证
-  - ARM64 Linux 环境
-  - 完整 pyperformance 测试
+- [x] **TODO-03B-01**: Phase 3B Docker ARM 验证
+  - 创建 `docker/Dockerfile.arm`
+  - 创建 `docker/docker-compose.arm.yml`
+  - 创建 `docker/arm/scripts/build-lto.sh`
+  - 创建 `docker/arm/scripts/run-full-suite.sh`
+  - 提交: `bdf898e`, `0d633e6`, `2e89d57`, `194b447`
 
 ---
 
@@ -180,10 +198,10 @@
 
 | 工具 | 版本 | 状态 | 备注 |
 |------|------|------|------|
-| GCC | 13+ | ✅ 已安装 | 主要编译器 |
-| Clang | 18+ | ⚠️ 待安装 | ARM 服务器 |
-| llvm-ar | - | ⚠️ 待安装 | ARM 服务器 |
-| pyperformance | latest | ✅ 已安装 | 基准测试 |
+| GCC | 13+ | ✅ 可用 | Docker ARM 镜像 |
+| Clang | 18+ | ✅ 可用 | Docker ARM 镜像 |
+| llvm-ar | 18+ | ✅ 可用 | Docker ARM 镜像 |
+| pyperformance | latest | ✅ 可用 | Docker ARM 镜像 |
 
 ---
 
@@ -235,6 +253,7 @@
 
 | 日期 | 变更 | 作者 | 备注 |
 |------|------|------|------|
+| 2026-03-24 | 完成 Plan 03B-01 | GSD | Docker ARM environment with GCC 13/Clang 18，5 个文件，565 行代码 |
 | 2026-03-24 | 完成 Plan 03A-01 | GSD | 5-benchmark automation with LTO comparison，含 8 个测试用例 |
 | 2026-03-24 | 完成 Plan 03A-02 | GSD | macOS smoke test with build time measurement，含 6 个测试用例 |
 | 2026-03-24 | 更新 STATE.md | GSD | 更新 Wave 1 完成状态，Wave 2 待执行 |
@@ -250,22 +269,29 @@
 
 ## 下一步行动
 
-1. **Phase 2 完成**: Plan 02-02 已完成 ✅
-   - README.md 添加 LTO/PGO 使用指南
-   - 创建 docs/build.md 完整构建文档
-   - Commit: fb8bef2
+### 选项 1: 执行 Phase 3C Wave 3 (性能验证)
+```bash
+/gsd-execute-phase 3C    # 执行 Phase 3C Wave 3
+```
 
-2. **立即执行**: 开始 Plan 01-02
-   - 更新 PGO 训练工作负载
-   - 文件: `setup.py`
+**Wave 3 内容**:
+- 在 ARM64 硬件上运行完整 pyperformance 套件
+- 验证 +5%~10% 性能改进目标
+- 生成性能对比报告
 
-3. **本周**: 完成 Plan 01-02 和 01-03
-   - PGO 工作负载更新 (01-02)
-   - 工具链检查 (01-03)
+### 选项 2: 执行 Phase 3A Wave 2 (CI 集成)
+```bash
+/gsd-execute-phase 3A    # 执行 Phase 3A Wave 2
+```
 
-4. **下周**: Phase 1 里程碑检查
-   - 验证 LTO 构建成功
-   - 运行回归测试
+**Wave 2 内容**:
+- Plan 03A-03: GitHub Actions CI integration
+- Plan 03A-04: Performance regression detection in CI
+
+### 选项 3: 验证 Wave 2 工作
+```bash
+/gsd-verify-work --phase 3B  # 验证 Phase 3B Wave 2
+```
 
 ---
 
