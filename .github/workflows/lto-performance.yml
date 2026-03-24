@@ -104,10 +104,10 @@ jobs:
               body: '## LTO Performance Results\n\n' + report
             });
 
-  # Full validation job (runs on ARM when available)
+  # Full validation job on native ARM64
   lto-full-validate:
     name: Full LTO Validation (ARM64)
-    runs-on: ubuntu-latest  # TODO: Switch to ARM runner when available
+    runs-on: ubuntu-24.04-arm  # Native ARM64 runner
     timeout-minutes: 120
     needs: lto-quick-validate
 
@@ -115,46 +115,121 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Set up QEMU for ARM64 emulation
-        uses: docker/setup-qemu-action@v3
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v6
         with:
-          platforms: arm64
+          python-version: '3.14.3'
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build ARM64 Docker image
+      - name: Install system dependencies
         run: |
-          docker build -f docker/Dockerfile.arm -t cinderx-arm:latest .
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            llvm-19 \
+            llvm-19-dev \
+            llvm-19-tools
 
-      - name: Run full validation in container
+          # Create LLVM symlinks
+          sudo ln -sf /usr/bin/llvm-ar-19 /usr/local/bin/llvm-ar
+          sudo ln -sf /usr/bin/llvm-profdata-19 /usr/local/bin/llvm-profdata
+          sudo ln -sf /usr/bin/llvm-ranlib-19 /usr/local/bin/llvm-ranlib
+
+      - name: Install Python dependencies
         run: |
-          docker run --rm \
-            -v $(pwd):/workspace \
-            -e CINDERX_ENABLE_LTO=1 \
-            cinderx-arm:latest \
-            bash -c "
-              echo 'Running full benchmark suite...'
-              /workspace/docker/arm/scripts/build-lto.sh --output /workspace/results/
-              /workspace/docker/arm/scripts/run-full-suite.sh --output /workspace/results/
-            "
+          python -m pip install --upgrade pip
+          pip install build pyperformance
 
-      - name: Upload full results
+      - name: Build baseline wheel
+        run: |
+          echo "Building baseline (no LTO)..."
+          export CINDERX_BUILD_JOBS=2
+          export PYTHONJITHUGEPAGES=0
+          python -m build --wheel
+          cp dist/cinderx-*-linux_aarch64.whl baseline.whl
+
+      - name: Build LTO wheel
+        run: |
+          echo "Building with LTO..."
+          rm -rf build/ dist/
+          export CINDERX_ENABLE_LTO=1
+          export CINDERX_BUILD_JOBS=2
+          export PYTHONJITHUGEPAGES=0
+          python -m build --wheel
+          cp dist/cinderx-*-linux_aarch64.whl lto.whl
+
+      - name: Run performance validation
+        run: |
+          python scripts/bench/validate_lto_performance.py \
+            --baseline-wheel baseline.whl \
+            --lto-wheel lto.whl \
+            --benchmark-suite generators \
+            --samples 10 \
+            --output results/validation-results.json
+
+      - name: Display results
+        run: |
+          cat results/validation-results.json | python -m json.tool
+
+          # Create summary
+          python << 'PY'
+          import json
+          with open('results/validation-results.json') as f:
+              data = json.load(f)
+
+          summary = data['summary']
+          print("\n## Performance Summary\n")
+          print(f"Geometric mean improvement: **{summary['geometric_mean_improvement']:.2f}%**")
+          print(f"Regressions: {summary['regressions']}/{summary['total_benchmarks']}")
+          print(f"Target: +5%~+10% improvement, <1% regression")
+
+          # Check targets
+          if summary['regressions'] > 0:
+              print("\n⚠️  Performance regression detected!")
+              exit(1)
+          elif summary['geometric_mean_improvement'] < 5.0:
+              print("\n⚠️  Improvement below target (<5%)")
+          elif summary['geometric_mean_improvement'] > 10.0:
+              print("\n✨ Improvement exceeds target (>10%)")
+          else:
+              print("\n✅ Performance improvement within target range!")
+          PY
+
+      - name: Upload results
         uses: actions/upload-artifact@v4
         with:
-          name: lto-full-results
-          path: results/
+          name: lto-full-results-arm64
+          path: |
+            results/
+            baseline.whl
+            lto.whl
           retention-days: 90
 
-      - name: Check for regressions
-        run: |
-          if [ -f results/comparison.json ]; then
-            REGRESSIONS=$(jq '.regressions | length' results/comparison.json)
-            if [ "$REGRESSIONS" -gt 0 ]; then
-              echo "ERROR: $REGRESSIONS regression(s) detected"
-              exit 1
-            fi
-          fi
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const results = JSON.parse(fs.readFileSync('results/validation-results.json', 'utf8'));
+
+            const summary = results.summary;
+            const body = `## LTO Performance Results (ARM64)
+
+            - **Geometric mean improvement**: ${summary.geometric_mean_improvement.toFixed(2)}%
+            - **Regressions**: ${summary.regressions}/${summary.total_benchmarks}
+            - **Target**: +5%~+10% improvement, <1% regression
+
+            ${summary.regressions === 0 && summary.geometric_mean_improvement >= 5.0
+              ? '✅ All performance targets met!'
+              : '⚠️  Performance targets not met'}`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
 
   # Build time validation
   lto-build-time:
