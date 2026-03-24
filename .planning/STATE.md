@@ -2,15 +2,18 @@
 
 ## 当前状态概览
 
-**项目阶段**: Phase 1 & 2 已完成 ✅  
-**最后更新**: 2026-03-23  
-**下次更新**: Phase 3 规划时
+**项目阶段**: Phase 3A Wave 1 已完成 ✅  
+**最后更新**: 2026-03-24  
+**下次更新**: Phase 3A Wave 2 执行
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Phase 1: 基础修复    [██████████] 100% ✅ 已完成           │
 │  Phase 2: 功能完善    [██████████] 100% ✅ 已完成           │
-│  Phase 3: 性能优化    [░░░░░░░░░░] 0%  ⏳ 等待中            │
+│  Phase 3A Wave 1:     [██████████] 100% ✅ 已完成           │
+│    - Plan 03A-01: 5-benchmark automation                    │
+│    - Plan 03A-02: macOS smoke test                          │
+│  Phase 3B Wave 2:     [░░░░░░░░░░] 0%  ⏳ 等待中            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -76,28 +79,48 @@
 | 02-01 | LTO 检测 API | `cinderx.is_lto_enabled()` Python/C++ API |
 | 02-02 | 文档更新 | README.md + docs/build.md 完整文档 |
 
+### Phase 3A Wave 1: 基准测试自动化 (2026-03-24)
+
+| 计划 | 描述 | 关键成果 |
+|------|------|----------|
+| 03A-01 | 5-benchmark automation | `run_pyperf_subset.py` + `compare_lto_impact.py` |
+| 03A-02 | macOS smoke test | `macos_smoke_test.py` + `quick_validation.sh` |
+
+**关键指标达成:**
+- ✅ 5-benchmark JIT subset automation (richards, nbody, deltablue, regex_compile, nqueens)
+- ✅ LTO vs non-LTO statistical comparison with geometric mean
+- ✅ < 1% regression detection implemented
+- ✅ macOS smoke test with build time measurement
+- ✅ < 30% build time increase threshold validation
+- ✅ One-command validation: `./scripts/bench/quick_validation.sh`
+
 ---
 
 ## 下一步行动 🚀
 
-### 选项 1: 进入 Phase 3 (性能优化)
+### 选项 1: 执行 Phase 3A Wave 2 (剩余计划)
 ```bash
-/gsd-plan-phase 3    # 规划 Phase 3
-/gsd-execute-phase 3 # 执行 Phase 3
+/gsd-execute-phase 3A    # 执行 Phase 3A Wave 2
 ```
 
-**Phase 3 目标**:
-- 性能基准测试自动化
-- CI/CD GitHub Actions 集成
-- 性能优化调优
+**Wave 2 内容**:
+- Plan 03A-03: GitHub Actions CI integration
+- Plan 03A-04: Performance regression detection in CI
 
-### 选项 2: 验证当前工作
+### 选项 2: 执行 Phase 3B (Docker ARM 验证)
 ```bash
-/gsd-verify-work --all  # 验证所有阶段
+/gsd-execute-phase 3B    # 执行 Phase 3B
 ```
 
-### 选项 3: 标记项目完成
-当前里程碑（Phase 1 & 2）已完成，可以标记为完成状态。
+**Phase 3B 目标**:
+- ARM64 Linux LTO 验证
+- Full pyperformance suite testing
+- Docker-based reproducible builds
+
+### 选项 3: 验证 Wave 1 工作
+```bash
+/gsd-verify-work --phase 3A  # 验证 Phase 3A Wave 1
+```
 
 ---
 
@@ -105,34 +128,33 @@
 
 ### 高优先级（本周）
 
-- [x] **TODO-001**: 提交 GSD 项目文档
-  - 提交 `config.json`, `PROJECT.md`, `REQUIREMENTS.md`, `ROADMAP.md`
-  - Commit message: "gsd: 初始化 LTO/PGO 性能修复项目"
+- [x] **TODO-03A-01**: 执行 Plan 03A-01 (5-benchmark automation)
+  - 创建 `scripts/bench/run_pyperf_subset.py`
+  - 创建 `scripts/bench/compare_lto_impact.py`
+  - TDD 方法: 测试优先
+  - 提交: `877e651`, `c36ee63`
 
-- [x] **TODO-002**: 完成 Task 1.1 (Plan 01-01)
-  - 标记 JIT 运行时函数为 noinline
-  - 文件: `cinderx/Jit/jit_rt.h`, `cinderx/Jit/jit_rt.cpp`
-  - 结果: 113 个函数声明和定义已标记, 符号表验证通过
+- [x] **TODO-03A-02**: 执行 Plan 03A-02 (macOS smoke test)
+  - 创建 `scripts/bench/macos_smoke_test.py`
+  - 创建 `scripts/bench/quick_validation.sh`
+  - TDD 方法: 测试优先
+  - 提交: `74ba526`, `f8c291b`
 
 ### 中优先级（下周）
 
-- [ ] **TODO-003**: 执行 Task 1.2
-  - 更新 PGO 工作负载
-  - 文件: `setup.py`
+- [ ] **TODO-03A-03**: 执行 Plan 03A-03 (CI integration)
+  - GitHub Actions workflow
+  - 自动触发基准测试
 
-- [ ] **TODO-004**: 执行 Task 1.3
-  - 添加工具链检查
-  - 文件: `setup.py`
+- [ ] **TODO-03A-04**: 执行 Plan 03A-04 (regression detection)
+  - PR 自动评论
+  - 性能报告生成
 
 ### 低优先级（后续）
 
-- [ ] **TODO-005**: 执行 Task 1.4
-  - macOS 优雅降级
-  - 文件: `CMakeLists.txt`
-
-- [ ] **TODO-006**: Phase 1 集成测试
-  - 验证 LTO 构建
-  - 创建测试报告
+- [ ] **TODO-03B-01**: Phase 3B Docker ARM 验证
+  - ARM64 Linux 环境
+  - 完整 pyperformance 测试
 
 ---
 
@@ -213,12 +235,14 @@
 
 | 日期 | 变更 | 作者 | 备注 |
 |------|------|------|------|
+| 2026-03-24 | 完成 Plan 03A-01 | GSD | 5-benchmark automation with LTO comparison，含 8 个测试用例 |
+| 2026-03-24 | 完成 Plan 03A-02 | GSD | macOS smoke test with build time measurement，含 6 个测试用例 |
+| 2026-03-24 | 更新 STATE.md | GSD | 更新 Wave 1 完成状态，Wave 2 待执行 |
 | 2026-03-23 | 初始化项目 | GSD | 创建所有规划文档 |
 | 2026-03-23 | 完成技术分析 | GSD | 识别 5 大根因 |
 | 2026-03-23 | 完成 Plan 01-01 | GSD | 标记 113 个 JITRT 函数为 noinline，符号表验证通过 |
 | 2026-03-23 | 完成 Plan 02-01 | GSD | 实现 LTO 检测 API `cinderx.is_lto_enabled()`，包含 C++/Python 实现和测试 |
 | 2026-03-23 | 完成 Plan 02-02 | GSD | 更新 LTO/PGO 文档：README.md 添加使用指南，创建 docs/build.md 完整构建文档 |
-| 2026-03-23 | 更新 STATE.md | GSD | 更新项目状态、变更历史和下一步行动 |
 
 ---
 
