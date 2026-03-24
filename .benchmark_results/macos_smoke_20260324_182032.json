@@ -1,0 +1,48 @@
+{
+  "config": {
+    "max_build_time_increase_pct": 30.0,
+    "iterations": 3,
+    "quick_mode": true
+  },
+  "baseline_build_time": 47.616779083007714,
+  "baseline_build_failed": false,
+  "lto_build_time": 30.225551749987062,
+  "lto_build_failed": false,
+  "build_time_increase_pct": -36.523317343038855,
+  "benchmarks": [
+    {
+      "name": "richards",
+      "error": "",
+      "status": "failed"
+    },
+    {
+      "name": "nbody",
+      "error": "",
+      "status": "failed"
+    },
+    {
+      "name": "deltablue",
+      "error": "",
+      "status": "failed"
+    },
+    {
+      "name": "regex_compile",
+      "error": "",
+      "status": "failed"
+    },
+    {
+      "name": "nqueens",
+      "error": "",
+      "status": "failed"
+    }
+  ],
+  "benchmarks_passed": 0,
+  "benchmarks_failed": 5,
+  "issues": [
+    "5 benchmark(s) failed",
+    "5 benchmark(s) failed",
+    "No benchmarks passed"
+  ],
+  "passed": false,
+  "total_duration_seconds": 78.50251841600402
+}

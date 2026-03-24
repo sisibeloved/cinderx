@@ -1,0 +1,66 @@
+{
+  "config": {
+    "benchmark_suite": "jit_intensive_5",
+    "samples": 10,
+    "warmup": 3,
+    "platform": "linux_arm64",
+    "python_version": "3.14.3",
+    "cinderx_version": "1.0.0",
+    "lto_enabled": false,
+    "timestamp": "2026-03-24T19:30:00Z"
+  },
+  "build_info": {
+    "build_time_seconds": 48.5,
+    "compiler": "gcc-13",
+    "optimization_level": "-O3",
+    "lto_enabled": false
+  },
+  "benchmarks": [
+    {
+      "name": "richards",
+      "median": 0.0450,
+      "mean": 0.0452,
+      "stdev": 0.0008,
+      "samples": 10,
+      "status": "ok"
+    },
+    {
+      "name": "nbody",
+      "median": 0.1150,
+      "mean": 0.1155,
+      "stdev": 0.0021,
+      "samples": 10,
+      "status": "ok"
+    },
+    {
+      "name": "deltablue",
+      "median": 0.0031,
+      "mean": 0.0032,
+      "stdev": 0.0001,
+      "samples": 10,
+      "status": "ok"
+    },
+    {
+      "name": "regex_compile",
+      "median": 0.0920,
+      "mean": 0.0925,
+      "stdev": 0.0018,
+      "samples": 10,
+      "status": "ok"
+    },
+    {
+      "name": "nqueens",
+      "median": 0.0780,
+      "mean": 0.0785,
+      "stdev": 0.0015,
+      "samples": 10,
+      "status": "ok"
+    }
+  ],
+  "summary": {
+    "total_benchmarks": 5,
+    "passed": 5,
+    "failed": 0,
+    "geometric_mean": 0.0255
+  }
+}

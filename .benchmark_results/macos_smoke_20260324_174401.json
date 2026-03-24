@@ -1,0 +1,20 @@
+{
+  "config": {
+    "max_build_time_increase_pct": 30.0,
+    "iterations": 3,
+    "quick_mode": true
+  },
+  "baseline_build_time": 34.27838920900831,
+  "baseline_build_failed": false,
+  "lto_build_time": 0.19871825000154786,
+  "lto_build_failed": true,
+  "build_time_increase_pct": null,
+  "benchmarks": [],
+  "benchmarks_passed": 0,
+  "benchmarks_failed": 0,
+  "issues": [
+    "LTO build failed"
+  ],
+  "passed": false,
+  "total_duration_seconds": 34.47737716601114
+}

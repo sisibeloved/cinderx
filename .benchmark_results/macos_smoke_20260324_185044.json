@@ -1,0 +1,44 @@
+{
+  "config": {
+    "max_build_time_increase_pct": 30.0,
+    "iterations": 3,
+    "quick_mode": true
+  },
+  "baseline_build_time": 47.45390866699745,
+  "baseline_build_failed": false,
+  "lto_build_time": 46.13748012500582,
+  "lto_build_failed": false,
+  "build_time_increase_pct": -2.774120360094079,
+  "benchmarks": [
+    {
+      "name": "richards",
+      "median": 0.04294507274971693,
+      "status": "ok"
+    },
+    {
+      "name": "nbody",
+      "median": 0.11048570850107353,
+      "status": "ok"
+    },
+    {
+      "name": "deltablue",
+      "median": 0.0029886370468830137,
+      "status": "ok"
+    },
+    {
+      "name": "regex_compile",
+      "median": 0.09153371849970426,
+      "status": "ok"
+    },
+    {
+      "name": "nqueens",
+      "median": 0.07613590625260258,
+      "status": "ok"
+    }
+  ],
+  "benchmarks_passed": 5,
+  "benchmarks_failed": 0,
+  "issues": [],
+  "passed": true,
+  "total_duration_seconds": 141.6800937919761
+}
