@@ -103,7 +103,10 @@ case "${PLATFORM}" in
         fi
         
         OUTPUT_FILE="${OUTPUT_DIR}/macos_smoke_${TIMESTAMP}.json"
-        
+
+        # Required for JIT to work on macOS
+        export PYTHONJITHUGEPAGES=0
+
         if "${PYTHON_CMD}" "${SCRIPT_DIR}/macos_smoke_test.py" \
             ${QUICK_MODE} \
             ${VERBOSE} \
@@ -135,7 +138,10 @@ case "${PLATFORM}" in
         # For Linux, we can run a simplified version
         # that doesn't require full Docker setup
         OUTPUT_FILE="${OUTPUT_DIR}/linux_quick_${TIMESTAMP}.json"
-        
+
+        # Required for JIT to work properly
+        export PYTHONJITHUGEPAGES=0
+
         echo "Step 1: Running 5-benchmark subset..."
         if "${PYTHON_CMD}" "${SCRIPT_DIR}/run_pyperf_subset.py" \
             --iterations 3 \

@@ -1,88 +1,90 @@
 #!/usr/bin/env python3
 """
-Run a subset of pyperformance benchmarks optimized for JIT validation.
-
-This script runs 5 JIT-intensive benchmarks from the pyperformance suite:
-- richards: Classic OS kernel simulation
-- nbody: N-body physics simulation
-- deltablue: Constraint solver
-- regex_compile: Regular expression compilation
-- nqueens: N-Queens puzzle solver
-
-Usage:
-    python scripts/bench/run_pyperf_subset.py --output results.json
-    python scripts/bench/run_pyperf_subset.py --iterations 5 --warmup 1
+Fixed version of run_pyperf_subset.py
 """
-
-from __future__ import annotations
 
 import argparse
 import json
 import logging
+import os
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
+
+# Default benchmarks that are JIT-intensive
+DEFAULT_BENCHMARKS = [
+    "richards",
+    "nbody",
+    "deltablue",
+    "regex_compile",
+    "nqueens",
+]
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-# Default 5-benchmark JIT subset
-DEFAULT_BENCHMARKS = ["richards", "nbody", "deltablue", "regex_compile", "nqueens"]
-
 
 @dataclass
 class BenchmarkConfig:
-    """Configuration for benchmark execution."""
+    """Configuration for benchmark run."""
 
     benchmarks: List[str]
     iterations: int = 5
     warmup: int = 1
-    output_path: Optional[Path] = None
+    output_file: Optional[Path] = None
     fast_mode: bool = False
-
-    def __post_init__(self):
-        if self.iterations < 1:
-            raise ValueError(f"iterations must be >= 1, got {self.iterations}")
-        if self.warmup < 0:
-            raise ValueError(f"warmup must be >= 0, got {self.warmup}")
-        if not self.benchmarks:
-            raise ValueError("benchmarks list cannot be empty")
+    verbose: bool = False
 
 
 def parse_pyperf_json(data: dict) -> Dict[str, float]:
     """
-    Parse pyperformance JSON output into benchmark name -> median time mapping.
+    Parse pyperformance JSON output to extract benchmark results.
 
     Args:
-        data: Parsed JSON from pyperformance output
+        data: JSON data from pyperformance
 
     Returns:
-        Dictionary mapping benchmark name to median execution time
-
-    Raises:
-        ValueError: If benchmarks list is empty or malformed
+        Dictionary mapping benchmark name to median value in seconds
     """
+    import statistics
+
+    results = {}
+
+    # Get benchmark name from top-level metadata
+    metadata = data.get("metadata", {})
+    benchmark_name = metadata.get("name")
+
+    if not benchmark_name:
+        raise ValueError("No benchmark name found in metadata")
+
+    # Extract all values from all runs
     benchmarks = data.get("benchmarks", [])
     if not benchmarks:
         raise ValueError("No benchmarks found in pyperformance output")
 
-    result = {}
-    for bench in benchmarks:
-        name = bench.get("name")
-        median = bench.get("median")
-        if name is None or median is None:
-            logger.warning(f"Skipping malformed benchmark entry: {bench}")
-            continue
-        result[name] = float(median)
+    all_values = []
+    for benchmark in benchmarks:
+        runs = benchmark.get("runs", [])
+        for run in runs:
+            values = run.get("values", [])
+            if values:
+                all_values.extend(values)
 
-    if not result:
-        raise ValueError("No valid benchmark results found")
+    if not all_values:
+        raise ValueError(f"No benchmark values found for {benchmark_name}")
 
-    return result
+    # Calculate median
+    median_value = statistics.median(all_values)
+    results[benchmark_name] = median_value
+
+    logger.debug(f"Parsed {benchmark_name}: median={median_value:.6f}s from {len(all_values)} values")
+
+    return results
 
 
 def run_single_benchmark(
@@ -100,26 +102,36 @@ def run_single_benchmark(
     Returns:
         Dictionary with benchmark results including median, mean, stddev
     """
-    cmd = [
-        sys.executable,
-        "-m",
-        "pyperformance",
-        "run",
-        "-b",
-        benchmark,
-        "--output",
-        "-",  # Output to stdout
-    ]
-
-    if fast_mode:
-        cmd.append("--fast")
-
-    logger.info(f"Running benchmark: {benchmark}")
-    logger.debug(f"Command: {' '.join(cmd)}")
+    # Use a unique filename for output (don't create it yet, pyperformance doesn't like existing files)
+    import uuid
+    temp_dir = tempfile.gettempdir()
+    temp_output = os.path.join(temp_dir, f"pyperf_{uuid.uuid4().hex}.json")
 
     try:
+        cmd = [
+            sys.executable,
+            "-m",
+            "pyperformance",
+            "run",
+            "-b",
+            benchmark,
+            "--output",
+            temp_output,
+        ]
+
+        if fast_mode:
+            cmd.append("--fast")
+
+        logger.info(f"Running benchmark: {benchmark}")
+        logger.debug(f"Command: {' '.join(cmd)}")
+
+        # Ensure JIT can allocate memory on macOS
+        env = dict(os.environ)
+        env.setdefault("PYTHONJITHUGEPAGES", "0")
+
         result = subprocess.run(
             cmd,
+            env=env,
             capture_output=True,
             text=True,
             timeout=300,  # 5 minute timeout per benchmark
@@ -129,8 +141,10 @@ def run_single_benchmark(
             logger.error(f"Benchmark {benchmark} failed: {result.stderr}")
             return {"name": benchmark, "error": result.stderr, "status": "failed"}
 
-        # Parse JSON output
-        data = json.loads(result.stdout)
+        # Read JSON output from temp file
+        with open(temp_output, 'r') as f:
+            data = json.load(f)
+
         parsed = parse_pyperf_json(data)
 
         if benchmark not in parsed:
@@ -159,6 +173,13 @@ def run_single_benchmark(
     except Exception as e:
         logger.error(f"Unexpected error running {benchmark}: {e}")
         return {"name": benchmark, "error": str(e), "status": "error"}
+    finally:
+        # Clean up temp file
+        try:
+            if temp_output and os.path.exists(temp_output):
+                os.unlink(temp_output)
+        except:
+            pass
 
 
 def run_benchmark_subset(config: BenchmarkConfig) -> Dict[str, any]:
@@ -184,52 +205,32 @@ def run_benchmark_subset(config: BenchmarkConfig) -> Dict[str, any]:
             "fast_mode": config.fast_mode,
         },
         "benchmarks": [],
-        "summary": {"total": len(config.benchmarks), "passed": 0, "failed": 0},
+        "summary": {"total": 0, "passed": 0, "failed": 0},
     }
 
     for benchmark in config.benchmarks:
-        bench_result = run_single_benchmark(
+        result = run_single_benchmark(
             benchmark,
             iterations=config.iterations,
             warmup=config.warmup,
             fast_mode=config.fast_mode,
         )
-        results["benchmarks"].append(bench_result)
+        results["benchmarks"].append(result)
+        results["summary"]["total"] += 1
 
-        if bench_result.get("status") == "ok":
+        if result.get("status") == "ok":
             results["summary"]["passed"] += 1
         else:
             results["summary"]["failed"] += 1
 
-    # Calculate geometric mean of successful benchmarks
-    successful_times = [
-        b["median"]
-        for b in results["benchmarks"]
-        if b.get("status") == "ok" and "median" in b
-    ]
-
-    if successful_times:
-        results["summary"]["geometric_mean"] = calculate_geometric_mean(
-            successful_times
-        )
-
     return results
 
 
-def calculate_geometric_mean(values: List[float]) -> float:
-    """Calculate geometric mean of a list of values."""
-    import math
-
-    if not values:
-        raise ValueError("Cannot calculate geometric mean of empty list")
-    product = 1.0
-    for v in values:
-        product *= v
-    return product ** (1.0 / len(values))
-
-
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run JIT-focused benchmark subset")
+    parser = argparse.ArgumentParser(
+        description="Run JIT-focused benchmark subset",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument(
         "--benchmarks",
         nargs="+",
@@ -243,10 +244,15 @@ def main() -> int:
         help="Number of iterations per benchmark (default: 5)",
     )
     parser.add_argument(
-        "--warmup", type=int, default=1, help="Number of warmup iterations (default: 1)"
+        "--warmup",
+        type=int,
+        default=1,
+        help="Number of warmup iterations (default: 1)",
     )
     parser.add_argument(
-        "--output", "-o", type=Path, help="Output file path for JSON results"
+        "--output", "-o",
+        type=Path,
+        help="Output file path for JSON results",
     )
     parser.add_argument(
         "--fast",
@@ -254,7 +260,9 @@ def main() -> int:
         help="Use --fast mode for quicker results (less accurate)",
     )
     parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Enable verbose logging"
+        "--verbose", "-v",
+        action="store_true",
+        help="Enable verbose logging",
     )
 
     args = parser.parse_args()
@@ -262,32 +270,29 @@ def main() -> int:
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    try:
-        config = BenchmarkConfig(
-            benchmarks=args.benchmarks,
-            iterations=args.iterations,
-            warmup=args.warmup,
-            output_path=args.output,
-            fast_mode=args.fast,
-        )
-    except ValueError as e:
-        logger.error(f"Invalid configuration: {e}")
-        return 1
+    config = BenchmarkConfig(
+        benchmarks=args.benchmarks,
+        iterations=args.iterations,
+        warmup=args.warmup,
+        output_file=args.output,
+        fast_mode=args.fast,
+        verbose=args.verbose,
+    )
 
     results = run_benchmark_subset(config)
 
     # Output results
-    json_output = json.dumps(results, indent=2)
-
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json_output)
-        logger.info(f"Results written to {args.output}")
+    output_json = json.dumps(results, indent=2)
+    if config.output_file:
+        config.output_file.write_text(output_json)
+        logger.info(f"Results written to {config.output_file}")
     else:
-        print(json_output)
+        print(output_json)
 
-    # Return non-zero if any benchmarks failed
-    return 0 if results["summary"]["failed"] == 0 else 1
+    # Return exit code based on results
+    if results["summary"]["failed"] > 0:
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

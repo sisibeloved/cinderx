@@ -360,7 +360,7 @@ def main() -> int:
         "--max-build-increase",
         type=float,
         default=DEFAULT_MAX_BUILD_TIME_INCREASE_PCT,
-        help=f"Max build time increase percentage (default: {DEFAULT_MAX_BUILD_TIME_INCREASE_PCT}%)",
+        help=f"Max build time increase percentage (default: {DEFAULT_MAX_BUILD_TIME_INCREASE_PCT}%%)",
     )
     parser.add_argument(
         "--iterations",

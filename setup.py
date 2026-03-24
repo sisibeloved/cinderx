@@ -522,6 +522,14 @@ class BuildExt(build_ext):
 
         # LTO configuration
         enable_lto = is_env_flag_enabled("CINDERX_ENABLE_LTO")
+
+        # Check if we're on macOS - LTO is not supported on macOS
+        is_macos = sys.platform == "darwin"
+
+        if enable_lto and is_macos:
+            print("WARNING: LTO is not supported on macOS. Disabling LTO.")
+            enable_lto = False
+
         if enable_lto:
             # Detect compiler type and validate toolchain
             cc = os.environ.get("CC", "gcc")
