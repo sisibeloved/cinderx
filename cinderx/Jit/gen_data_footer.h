@@ -77,6 +77,19 @@ struct GenDataFooter {
   // Frame header used for tracking the current frame.
   FrameHeader frame_header;
 #endif
+
+// Phase 2: State machine support
+// Current state for state machine generators.
+// -1 = uninitialized, 0 = initial, >0 = generated states
+// This field is used by the state machine generator to track execution state.
+#if PY_VERSION_HEX >= 0x030E0000
+  // Python 3.14+: Use existing gi_frame_state field from CPython
+  // No additional field needed, state is stored in PyGenObject::gi_frame_state
+#else
+  // Python < 3.14: Store state machine state in GenDataFooter
+  // Using int32_t for efficiency (aligned to 4 bytes, but padded to 8)
+  int32_t currentState{-1};
+#endif
 };
 
 #if PY_VERSION_HEX >= 0x030C0000

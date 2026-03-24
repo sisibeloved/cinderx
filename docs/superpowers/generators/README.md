@@ -2,9 +2,9 @@
 
 **目标**: 消除 CinderX JIT 编译递归生成器（Tree.__iter__ 模式）中的性能回退
 
-**当前状态**: InlineIter Phase 1 完成（3-32% 性能提升） ✅
+**当前状态**: Phase 2 状态机生成进行中 - Week 1 基础设施完成 ✅
 
-**最新进展**: InlineIter HIR 指令 + 逃逸分析已实施，远超 OptimizedYieldFrom 的 ~1% 改进
+**最新进展**: Phase 2 Week 1 完成，新增 StateSwitch/SaveState/LoadState/YieldFromInline HIR 指令
 
 ---
 
