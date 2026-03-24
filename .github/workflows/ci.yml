@@ -63,6 +63,64 @@ jobs:
       - name: Build wheels
         run: python -m cibuildwheel --output-dir wheelhouse
 
+  # LTO Build and Test Job
+  lto_build_test:
+    name: LTO Build Test
+    runs-on: ubuntu-latest
+    # Only run on LTO-related changes to save CI time
+    if: |
+      github.event_name == 'push' ||
+      contains(github.event.pull_request.changed_files, 'cinderx/Jit/jit_rt') ||
+      contains(github.event.pull_request.changed_files, 'CMakeLists.txt') ||
+      contains(github.event.pull_request.changed_files, 'setup.py')
+
+    steps:
+    - name: Checkout CinderX
+      uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.14.3'
+
+    - name: Install LTO dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y llvm-ar llvm-profdata
+
+    - name: Build CinderX with LTO
+      run: |
+        echo "Building CinderX with LTO enabled..."
+        CINDERX_ENABLE_LTO=1 pip install -e . -v 2>&1 | tee build-lto.log
+
+    - name: Verify LTO build
+      run: |
+        python -c "
+        import cinderx
+        assert cinderx.is_initialized(), 'CinderX failed to initialize'
+        print(f'CinderX initialized successfully')
+        print(f'LTO enabled: {cinderx.is_lto_enabled()}')
+        assert cinderx.is_lto_enabled(), 'LTO should be enabled'
+        "
+
+    - name: Run LTO regression tests
+      run: |
+        python -m pytest cinderx/PythonLib/test_cinderx/test_lto_regression.py -v
+
+    - name: Quick performance smoke test
+      run: |
+        pip install pyperformance
+        python scripts/bench/run_pyperf_subset.py --iterations 1 --fast --output lto-smoke.json
+        echo "LTO smoke test completed successfully"
+
+    - name: Upload LTO build logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: lto-build-logs
+        path: build-lto.log
+        retention-days: 7
+
   build_sdist:
     name: Build source distribution
     runs-on: ${{ matrix.os }}
