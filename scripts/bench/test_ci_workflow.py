@@ -71,9 +71,9 @@ class TestBuildComparison(unittest.TestCase):
         def calc_increase(baseline, current):
             return ((current / baseline) - 1.0) * 100.0
 
-        self.assertEqual(calc_increase(100.0, 100.0), 0.0)
-        self.assertEqual(calc_increase(100.0, 130.0), 30.0)
-        self.assertEqual(calc_increase(100.0, 150.0), 50.0)
+        self.assertAlmostEqual(calc_increase(100.0, 100.0), 0.0, places=5)
+        self.assertAlmostEqual(calc_increase(100.0, 130.0), 30.0, places=5)
+        self.assertAlmostEqual(calc_increase(100.0, 150.0), 50.0, places=5)
 
     def test_build_time_within_threshold(self):
         """Test build time threshold validation."""
