@@ -81,7 +81,7 @@ bool EscapeAnalysisPass::isStoredExternally(const Register* gen_reg) {
       // 检查是否存储到实例字段
       if (instr.opcode() == Opcode::kStoreField) {
         const StoreField* store = static_cast<const StoreField*>(&instr);
-        if (store && store->GetOperand(1) == gen_reg) {
+        if (store && store->value() == gen_reg) {
           JIT_LOG("  -> Generator is stored to field");
           return true;
         }
@@ -100,15 +100,15 @@ bool EscapeAnalysisPass::isPassedToUnknownFunction(const Register* gen_reg) {
   // 遍历所有基本块，查找函数调用
   for (const auto& block : func_->cfg.blocks) {
     for (const auto& instr : block) {
-      if (instr.opcode() == Opcode::kCall) {
-        // 检查参数中是否包含 gen_reg
-        const Call* call = static_cast<const Call*>(&instr);
+      // 检查 CallEx 指令
+      if (instr.opcode() == Opcode::kCallEx) {
+        const CallEx* call = static_cast<const CallEx*>(&instr);
         if (call) {
-          for (size_t i = 0; i < call->NumOperands(); i++) {
-            if (call->GetOperand(i) == gen_reg) {
-              JIT_LOG("  -> Generator is passed to function");
-              return true;
-            }
+          // 检查 pargs 中是否包含 gen_reg
+          Register* pargs = call->pargs();
+          if (pargs == gen_reg) {
+            JIT_LOG("  -> Generator is passed to function");
+            return true;
           }
         }
       }
@@ -128,30 +128,39 @@ bool EscapeAnalysisPass::isDirectlyConsumed(const Register* gen_reg) {
 
   for (const auto& block : func_->cfg.blocks) {
     for (const auto& instr : block) {
-      if (instr.opcode() == Opcode::kCall) {
-        const Call* call = static_cast<const Call*>(&instr);
-        if (!call || call->NumOperands() < 2) {
+      if (instr.opcode() == Opcode::kCallEx) {
+        const CallEx* call = static_cast<const CallEx*>(&instr);
+        if (!call) {
           continue;
         }
 
-        Register* func_reg = call->GetOperand(0);
+        Register* func_reg = call->func();
         if (!func_reg || !func_reg->instr()) {
           continue;
         }
 
         Instr* func_instr = func_reg->instr();
         
-        // 检查是否是 LoadGlobal 或 LoadBuiltin 指令
+        // 检查是否是 LoadGlobal 指令
         if (func_instr->opcode() == Opcode::kLoadGlobal) {
           const LoadGlobal* load_global = static_cast<const LoadGlobal*>(func_instr);
           if (load_global) {
-            const std::string& name = load_global->name();
-            // 检查是否是 list, set, tuple
-            if (name == "list" || name == "set" || name == "tuple") {
-              // 检查第一个参数是否是 gen_reg
-              if (call->NumOperands() >= 2 && call->GetOperand(1) == gen_reg) {
-                JIT_LOG("  -> Generator is directly consumed by {}", name);
-                return true;
+            // 获取全局变量名称
+            BorrowedRef<PyUnicodeObject> name_ref = load_global->name();
+            if (name_ref) {
+              // 转换为 C 字符串
+              const char* name_cstr = PyUnicode_AsUTF8(name_ref);
+              if (name_cstr) {
+                std::string name(name_cstr);
+                // 检查是否是 list, set, tuple
+                if (name == "list" || name == "set" || name == "tuple") {
+                  // 检查第一个参数是否是 gen_reg
+                  Register* pargs = call->pargs();
+                  if (pargs == gen_reg) {
+                    JIT_LOG("  -> Generator is directly consumed by {}", name);
+                    return true;
+                  }
+                }
               }
             }
           }
