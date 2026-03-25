@@ -2,7 +2,26 @@
 scratch
 cinderx.egg-info
 dist
-build
+/build
+/build-*
+
+# CMake build artifacts
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+_deps/
+*.cmake
+!CMakeLists.txt
+
+# Wheel files (should only be in dist/)
+*.whl
+
+# Compiled object files
+*.o
+*.obj
+*.a
+*.lib
 
 # IDE and editor configurations
 .idea/
@@ -51,6 +70,10 @@ MANIFEST
 # Profiling and performance
 *.prof
 *.lprof
+*.gcda
+*.gcno
+*.profdata
+*.profraw
 
 # Temporary files
 *.tmp
