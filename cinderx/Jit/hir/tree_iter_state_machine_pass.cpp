@@ -620,23 +620,10 @@ void TreeIterStateMachinePass::generateStateMachine(
 
     auto* load_field = static_cast<const LoadField*>(field_instr);
     Register* receiver = load_field->receiver();
-    std::string field_name(load_field->name());
 
     // 3. 生成 YieldFromInline 指令
-    // YieldFromInline(receiver, field_idx, next_state) -> yield 子迭代器的值
-
-    // 查找或创建 field_idx
-    // 注意：这里简化处理，假设 field_name 已经在常量池中
-    // 实际需要查找或创建 field_idx
-    int field_idx = 0;  // TODO: 正确获取 field_idx
-    if (field_name == "left") {
-      field_idx = 0;
-    } else if (field_name == "right") {
-      field_idx = 1;
-    }
-
-    Register* field_idx_reg = func.env.AllocateRegister();
-    state_bb->append<LoadConst>(field_idx_reg, Type::fromCInt(field_idx, TCInt32));
+    // YieldFromInline(iter, next_state) -> yield 子迭代器的值
+    // iter 已经是 GetIter(LoadField(...)) 的结果
 
     const FrameState* frame_state = yf->frameState();
     if (frame_state == nullptr) {
@@ -647,7 +634,7 @@ void TreeIterStateMachinePass::generateStateMachine(
 
     Register* yield_result = func.env.AllocateRegister();
     state_bb->append<YieldFromInline>(
-        yield_result, receiver, field_idx_reg, next_state, *frame_state);
+        yield_result, iter_reg, next_state, *frame_state);
 
     // 4. YieldFromInline 返回后，跳转回 dispatch 继续下一次迭代
     state_bb->append<Branch>(dispatch_block);

@@ -528,6 +528,18 @@ extern PyObject* JITRT_GetGenResumeEntry(
     PyObject* send_value,
     uint64_t finish_yield_from);
 
+// JITRT_YieldFromInlineHelper - 内联 yield from 辅助函数（树遍历状态机）
+// 用于 YieldFromInline 指令，直接调用迭代器的 next() 并更新状态。
+// 参数:
+//   - iter: 子迭代器
+//   - next_state: 状态机的下一个状态值
+// 返回值:
+//   - 非 nullptr: yield 的值
+//   - nullptr: 迭代完成或异常
+extern PyObject* JITRT_YieldFromInlineHelper(
+    PyObject* iter,
+    int32_t next_state);
+
 /* Unpack a sequence as in unpack_iterable(), and save the
  * results in a tuple.
  */
