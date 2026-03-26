@@ -1,54 +1,52 @@
 #!/bin/bash
-# Setup cinderx and dependencies in the container
-set -e
+# Setup cinderx and pyperformance in the container
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BENCHMARK=${BENCHMARK:-generators}
+PYPERFORMANCE_TMP="$(mktemp -d /tmp/pyperformance.XXXXXX)"
+CINDERX_WHEEL_TMP="$(mktemp -d /tmp/cinderx-wheel.XXXXXX)"
+CINDERX_WHEEL_CACHE_DIR=${CINDERX_WHEEL_CACHE_DIR:-/opt/cinderx-wheel-cache}
+trap 'rm -rf "$PYPERFORMANCE_TMP" "$CINDERX_WHEEL_TMP"' EXIT
 
-echo "=== Installing cinderx ==="
-pip3 install --quiet /dist/cinderx-*-linux_aarch64.whl 2>&1 | grep -v notice | tail -1
-
-echo "=== Preparing benchmark: $BENCHMARK ==="
-# Download benchmark files manually (pip is broken in Python 3.14)
-mkdir -p /root/benchmarks
-export SCRIPT_DIR BENCHMARK
-python3 << 'PY'
-import urllib.request
-import pathlib
-import sys
+export SCRIPT_DIR
+eval "$(python3 <<'PY'
 import os
+import sys
 
 sys.path.insert(0, os.environ["SCRIPT_DIR"])
-from benchmark_harness import benchmark_module_path, benchmark_root, pyperf_shim_code, resolve_benchmark
+from benchmark_harness import cinderx_source_root
 
-benchmark = os.environ["BENCHMARK"]
-spec = resolve_benchmark(benchmark)
-output_path = benchmark_module_path(benchmark_root(), benchmark)
-output_path.parent.mkdir(parents=True, exist_ok=True)
-
-print(f"Downloading {spec.benchmark_url}...")
-urllib.request.urlretrieve(spec.benchmark_url, output_path)
-print(f"✓ Saved to {output_path}")
-
-pyperf_path = pathlib.Path("/root/benchmarks/pyperf.py")
-pyperf_path.write_text(pyperf_shim_code(), encoding="utf-8")
-print(f"✓ Created pyperf shim at {pyperf_path}")
-
-local_pyperf_path = output_path.parent / "pyperf.py"
-local_pyperf_path.write_text(pyperf_shim_code(), encoding="utf-8")
-print(f"✓ Created local pyperf shim at {local_pyperf_path}")
+print(f'export CINDERX_SOURCE_ROOT_RESOLVED="{cinderx_source_root()}"')
 PY
+)"
+
+echo "=== Installing cinderx ==="
+mkdir -p "$CINDERX_WHEEL_CACHE_DIR"
+PYTHONJITDISABLE=1 python3 -m pip install --quiet build 2>&1 | grep -v notice | tail -1 || true
+(
+  cd "$CINDERX_SOURCE_ROOT_RESOLVED"
+  PYTHONJITDISABLE=1 CMAKE_BUILD_PARALLEL_LEVEL=1 CINDERX_BUILD_JOBS=1 python3 -m build --wheel --outdir "$CINDERX_WHEEL_TMP" 2>&1 | tail -5
+)
+cp "$CINDERX_WHEEL_TMP"/cinderx-*-linux_aarch64.whl "$CINDERX_WHEEL_CACHE_DIR"/
+PYTHONJITDISABLE=1 pip3 install --quiet --no-deps "$CINDERX_WHEEL_CACHE_DIR"/cinderx-*-linux_aarch64.whl 2>&1 | grep -v notice | tail -1
+
+echo "=== Installing pyperformance ==="
+cp -a /pyperformance/. "$PYPERFORMANCE_TMP"/
+PYTHONJITDISABLE=1 python3 -m pip install --quiet "$PYPERFORMANCE_TMP" 2>&1 | grep -v notice | tail -1 || true
 
 echo "=== Verifying installation ==="
 python3 << 'PY'
 import cinderx
 import cinderx.jit as jit
+import pyperformance
 
-assert cinderx.is_initialized(), "cinderx not initialized"
-print("✓ cinderx initialized and JIT enabled")
+if cinderx.get_import_error() is not None:
+    raise SystemExit(f"failed to import _cinderx: {cinderx.get_import_error()!r}")
+print(f"✓ cinderx import ok, initialized={cinderx.is_initialized()}")
+print(f"✓ pyperformance available: {pyperformance.__file__}")
 PY
 
 echo ""
 echo "=== Setup complete ==="
 echo "Run '/scripts/smoke.sh' to verify JIT functionality"
-echo "Run 'BENCHMARK=$BENCHMARK /scripts/test-benchmark.sh' to run benchmark comparison"
+echo "Run 'BENCHMARK=mdp /scripts/test-benchmark.sh' to run a pyperformance benchmark"

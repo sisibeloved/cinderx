@@ -1,134 +1,119 @@
 #!/bin/bash
-# Test CPython + CinderX performance
-set -e
+# Test CPython + CinderX with pyperformance.
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SAMPLES=${SAMPLES:-10}
 WARMUP=${WARMUP:-3}
-BENCHMARK=${BENCHMARK:-generators}
+BENCHMARK=${BENCHMARK:-mdp}
 ENABLE_OPTIMIZATION=${ENABLE_OPTIMIZATION:-0}
 OPT_ENV_FILE=${OPT_ENV_FILE:-}
 OPT_CONFIG_NAME=${OPT_CONFIG_NAME:-}
+AUTOJIT=${PYTHONJITAUTO:-10}
+DIAG=${DIAG:-0}
+JIT_LOG_FILE=${JIT_LOG_FILE:-/tmp/cinderx-jit.log}
+OUTPUT_FILE=${OUTPUT_FILE:-/tmp/pyperformance-cinderx.json}
+PYPERFORMANCE_TMP="$(mktemp -d /tmp/pyperformance.XXXXXX)"
+CINDERX_WHEEL_CACHE_DIR=${CINDERX_WHEEL_CACHE_DIR:-/opt/cinderx-wheel-cache}
+trap 'rm -rf "$PYPERFORMANCE_TMP"' EXIT
 
-echo "=== CPython + CinderX Test ==="
-echo "Benchmark: $BENCHMARK"
-echo "Samples: $SAMPLES, Warmup: $WARMUP"
+echo "=== CPython + CinderX pyperformance ==="
+echo "Benchmark selector: $BENCHMARK"
+echo "Warmup: $WARMUP"
 echo "Enable optimization: $ENABLE_OPTIMIZATION"
-echo ""
+echo "AutoJIT: $AUTOJIT"
+echo "Diag: $DIAG"
+echo "Output: $OUTPUT_FILE"
 
-export SCRIPT_DIR
-eval "$(python3 <<'PY'
-import glob
-import os
-import sys
-
-sys.path.insert(0, os.environ["SCRIPT_DIR"])
-from benchmark_harness import cinderx_wheel_glob
-
-matches = sorted(glob.glob(str(cinderx_wheel_glob())))
-if not matches:
-    raise SystemExit("no CinderX wheel found under /dist")
-print(f'CINDERX_WHEEL="{matches[-1]}"')
-PY
-)"
-
-export BENCHMARK ENABLE_OPTIMIZATION OPT_ENV_FILE OPT_CONFIG_NAME
+export SCRIPT_DIR BENCHMARK ENABLE_OPTIMIZATION OPT_ENV_FILE OPT_CONFIG_NAME AUTOJIT OUTPUT_FILE
 eval "$(python3 <<'PY'
 import os
 import sys
 
 sys.path.insert(0, os.environ["SCRIPT_DIR"])
 from benchmark_harness import (
+    cinderx_source_root,
     default_opt_env_file,
     load_opt_env_file,
     opt_config_name,
+    pyperformance_benchmark_filter,
+    pyperformance_source_root,
 )
 
-enabled = os.environ["ENABLE_OPTIMIZATION"] not in ("", "0")
-env = {}
-resolved_env_file = ""
-config_name = opt_config_name(os.environ.get("OPT_ENV_FILE") or None, enabled)
-if enabled:
-    candidate = os.environ.get("OPT_ENV_FILE") or str(default_opt_env_file(os.environ["BENCHMARK"]))
-    resolved_env_file = candidate
-    env = load_opt_env_file(candidate)
-    if os.environ.get("OPT_CONFIG_NAME"):
-        config_name = os.environ["OPT_CONFIG_NAME"]
+path = os.environ.get("OPT_ENV_FILE")
+if not path:
+    default_path = default_opt_env_file(os.environ["BENCHMARK"])
+    path = str(default_path) if default_path is not None else ""
+config_name = os.environ.get("OPT_CONFIG_NAME") or opt_config_name(path or None, True)
+env = load_opt_env_file(path or None) if os.environ["ENABLE_OPTIMIZATION"] not in ("", "0") else {}
+jit_arm_keys = ",".join(
+    key for key in sorted(os.environ) if key.startswith("PYTHONJIT_ARM_")
+)
 
+print(f'export BENCHMARK_FILTER="{pyperformance_benchmark_filter(os.environ["BENCHMARK"])}"')
+print(f'export CINDERX_SOURCE_ROOT_RESOLVED="{cinderx_source_root()}"')
+print(f'export PYPERFORMANCE_ROOT_RESOLVED="{pyperformance_source_root()}"')
+print(f'export OPT_ENV_FILE_RESOLVED="{path}"')
 print(f'export OPT_CONFIG_NAME_RESOLVED="{config_name}"')
-print(f'export OPT_ENV_FILE_RESOLVED="{resolved_env_file}"')
+print(f'export JIT_ARM_INHERIT_KEYS="{jit_arm_keys}"')
 for key, value in env.items():
     print(f'export {key}="{value}"')
 PY
 )"
 
-python3 - <<PY
-import importlib.util
-import subprocess
-import sys
+CINDERX_WHEEL_PATH=$(ls -t "$CINDERX_WHEEL_CACHE_DIR"/cinderx-*-linux_aarch64.whl 2>/dev/null | head -n1 || true)
+if [[ -z "$CINDERX_WHEEL_PATH" ]]; then
+  echo "missing cached cinderx wheel under $CINDERX_WHEEL_CACHE_DIR" >&2
+  echo "run the cinderx-test setup container first to build and cache the wheel" >&2
+  exit 1
+fi
+PYTHONJITDISABLE=1 python3 -m pip install --quiet --no-deps "$CINDERX_WHEEL_PATH" 2>&1 | grep -v notice | tail -1 || true
 
-if importlib.util.find_spec("cinderx") is None:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "$CINDERX_WHEEL"])
-PY
+cp -a "$PYPERFORMANCE_ROOT_RESOLVED"/. "$PYPERFORMANCE_TMP"/
+PYTHONJITDISABLE=1 python3 -m pip install --quiet "$PYPERFORMANCE_TMP" 2>&1 | grep -v notice | tail -1 || true
 
-# Run benchmark with CinderX enabled
-export SAMPLES WARMUP
-python3 << PY
+env \
+  LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
+  PYTHONJIT="${PYTHONJIT:-1}" \
+  PYTHONJITAUTO="$AUTOJIT" \
+  PYTHONJITHUGEPAGES=0 \
+  $(if [[ "$DIAG" != "0" ]]; then
+      printf '%s\n' \
+        "PYTHONJITLOGFILE=$JIT_LOG_FILE" \
+        "PYTHONJITDUMPFINALHIR=1" \
+        "PYTHONJITDUMPSTATS=1"
+    fi) \
+  $(python3 <<'PY'
 import os
-import sys
-import time
-import statistics
 
-samples = int(os.environ["SAMPLES"])
-warmup = int(os.environ["WARMUP"])
+for key, value in sorted(os.environ.items()):
+    if key.startswith("PYTHONJIT_ARM_"):
+        print(f"{key}={value}")
+PY
+) \
+  python3 -m pyperformance run \
+    --debug-single-value \
+    --warmups "$WARMUP" \
+    -b "$BENCHMARK_FILTER" \
+    --inherit-environ "$(python3 <<'PY'
+import os
 
-# Import and enable CinderX
-import cinderx
-import cinderx.jit as jit
-jit.enable()
+base = ["LD_LIBRARY_PATH", "PYTHONJIT", "PYTHONJITAUTO", "PYTHONJITHUGEPAGES"]
+diag = ["PYTHONJITLOGFILE", "PYTHONJITDUMPFINALHIR", "PYTHONJITDUMPSTATS"]
+extra = [key for key in os.environ.get("JIT_ARM_INHERIT_KEYS", "").split(",") if key]
+if os.environ.get("DIAG", "0") != "0":
+    base.extend(diag)
+print(",".join(base + extra))
+PY
+)" \
+    -o "$OUTPUT_FILE"
 
-print(f"CinderX version: {cinderx.__version__ if hasattr(cinderx, '__version__') else 'unknown'}")
-print(f"JIT enabled: {jit.is_enabled()}")
+python3 <<'PY'
+import os
+import pyperf
 
-opt_env = {
-    key: value
-    for key, value in os.environ.items()
-    if key.startswith("PYTHONJIT_ARM_")
-}
-if opt_env:
-    print(f"Optimization config: {os.environ.get('OPT_CONFIG_NAME_RESOLVED', 'unknown')}")
-    if os.environ.get("OPT_ENV_FILE_RESOLVED"):
-        print(f"Optimization env file: {os.environ['OPT_ENV_FILE_RESOLVED']}")
-    for key in sorted(opt_env):
-        print(f"Optimization enabled: {key}={opt_env[key]}")
-
-sys.path.insert(0, "$SCRIPT_DIR")
-from benchmark_harness import load_benchmark, resolve_benchmark
-
-spec = resolve_benchmark("$BENCHMARK")
-module, bench = load_benchmark("/root/benchmarks", "$BENCHMARK")
-bench_args = spec.bench_args
-
-# Warmup
-print(f"\nWarming up ({warmup} runs)...")
-for _ in range(warmup):
-    bench(*bench_args)
-
-# Measure
-print(f"\nMeasuring ({samples} runs)...")
-times = []
-for i in range(samples):
-    start = time.perf_counter()
-    bench(*bench_args)
-    end = time.perf_counter()
-    elapsed = end - start
-    times.append(elapsed)
-    print(f"  Run {i+1:2d}: {elapsed:.6f}s")
-
-# Calculate statistics
-avg = statistics.mean(times)
-stdev = statistics.stdev(times) if len(times) > 1 else 0.0
-
-opt_status = " (optimized)" if $ENABLE_OPTIMIZATION else ""
-print(f"\nCinderX Result{opt_status}: {avg:.6f}s ± {stdev:.6f}s")
+suite = pyperf.BenchmarkSuite.load(os.environ["OUTPUT_FILE"])
+bench = suite.get_benchmarks()[0]
+suffix = " (optimized)" if os.environ["ENABLE_OPTIMIZATION"] not in ("", "0") else ""
+print(f"\nCinderX Result{suffix} ({bench.get_name()}): {bench.mean():.6f}s")
+print(f"Results saved to {os.environ['OUTPUT_FILE']}")
 PY
