@@ -100,6 +100,7 @@ struct GenDataFooter {
   };
 
   int32_t stack_top{0};           // Stack top pointer (0 = empty)
+  int32_t popped_phase{0};        // Phase from last pop operation (for StateStackPop)
   int32_t reserved_padding{0};    // Padding to align StackEntry array
 
   // Stack capacity: 16 entries supports depth ≤ 12 (max 2^12 - 1 = 4095 nodes)

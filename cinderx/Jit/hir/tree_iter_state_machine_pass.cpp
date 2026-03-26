@@ -676,70 +676,38 @@ BasicBlock* hir_ns::StateMachineGenerator::GenerateBacktrackBlock() {
 }
 
 void hir_ns::StateMachineGenerator::GenerateStackPush(Register* node, TreeIterPhase phase) {
-  // Phase 3.2 Task 4: 状态机栈 Push 操作（方案 A 实现）
-  //
-  // 栈结构 (GenDataFooter.state_stack[16]):
-  //   每个 StackEntry = { node: int64_t, phase: int32_t, reserved: int32_t }
-  //   大小 = 16 字节/entry，总共 256 字节
-  //
-  // 伪代码：
-  //   offset = stack_top * 16
-  //   GenDataFooter.state_stack[offset].node = node
-  //   GenDataFooter.state_stack[offset].phase = phase
-  //   GenDataFooter.stack_top++
-
   JIT_LOG("StateMachineGenerator: GenerateStackPush (Task 4 - 方案 A)");
-  JIT_LOG("  -> node: {:p}, phase: {}", (void*)node, static_cast<int>(phase));
 
-  // 由于 CinderX HIR 没有直接的内存存储指令，我们使用运行时辅助函数
-  // 未来优化：直接生成 mov 指令访问 GenDataFooter.state_stack
-  //
-  // 方案 A（未来优化）的汇编代码：
-  //   mov rax, [rbp + offsetof(GenDataFooter, stack_top)]
-  //   mov [rbp + offsetof(GenDataFooter, state_stack) + rax*16 + 0], rdi  // node
-  //   mov [rbp + offsetof(GenDataFooter, state_stack) + rax*16 + 8], esi  // phase
-  //   inc dword ptr [rbp + offsetof(GenDataFooter, stack_top)]
+  // 方案 A 实现：使用 StateStackPush HIR 指令
+  BasicBlock* bb = bb_left_;
 
-  // 当前实现：使用运行时辅助函数（性能略低但功能完整）
-  BasicBlock* bb = bb_left_;  // Push 在 Left 块中调用
+  // 创建 phase 常量
+  Register* phase_reg = CreateIntConst(bb, static_cast<int>(phase));
 
-  // 调用 JITRT_StateStackPush(footer, node, phase)
-  // 注意：这需要添加 CallRuntime 指令，但 CinderX HIR 可能不支持
-  // 因此，我们使用占位符并添加详细注释
+  // 添加 StateStackPush 指令
+  bb->append<StateStackPush>(node, phase_reg);
 
-  JIT_LOG("  -> WARNING: 占位符实现 - 需要运行时支持或 codegen 扩展");
-
-  // 占位符：不执行实际操作
-  // TODO(Task 4 后续): 在 codegen/autogen.cpp 中添加 StateStackPush 指令支持
-  (void)node;
-  (void)phase;
+  JIT_LOG("  -> 已添加 StateStackPush 指令");
 }
 
 std::pair<hir_ns::Register*, hir_ns::Register*> hir_ns::StateMachineGenerator::GenerateStackPop() {
-  // Phase 3.2 Task 4: 状态机栈 Pop 操作（方案 A 实现）
-  //
-  // 伪代码：
-  //   GenDataFooter.stack_top--
-  //   offset = stack_top * 16
-  //   node = GenDataFooter.state_stack[offset].node
-  //   phase = GenDataFooter.state_stack[offset].phase
-  //   return (node, phase)
-
-  Register* node_reg = ctx_.func->env.AllocateRegister();
-  Register* phase_reg = ctx_.func->env.AllocateRegister();
-
   JIT_LOG("StateMachineGenerator: GenerateStackPop (Task 4 - 方案 A)");
 
-  // 方案 A（未来优化）的汇编代码：
-  //   dec dword ptr [rbp + offsetof(GenDataFooter, stack_top)]
-  //   mov rax, [rbp + offsetof(GenDataFooter, stack_top)]
-  //   mov rdi, [rbp + offsetof(GenDataFooter, state_stack) + rax*16 + 0]  // node
-  //   mov esi, [rbp + offsetof(GenDataFooter, state_stack) + rax*16 + 8]  // phase
+  // 方案 A 实现：使用 StateStackPop HIR 指令
+  // StateStackPop 输出 node (TObject)
+  // phase 存储在 GenDataFooter.popped_phase，后续通过 LoadPoppedPhase 读取
+  BasicBlock* bb = bb_backtrack_;
 
-  // 当前实现：返回占位符寄存器
-  // TODO(Task 4 后续): 在 codegen/autogen.cpp 中添加 StateStackPop 指令支持
+  // 分配输出寄存器
+  Register* node_reg = ctx_.func->env.AllocateRegister();
 
-  JIT_LOG("  -> WARNING: 返回未初始化寄存器 - 需要运行时支持或 codegen 扩展");
+  // 添加 StateStackPop 指令（输出 node）
+  bb->append<StateStackPop>(node_reg);
+
+  // phase 暂时使用零值占位符（TODO: 通过 LoadPoppedPhase 读取）
+  Register* phase_reg = CreateIntConst(bb, 0);
+
+  JIT_LOG("  -> 已添加 StateStackPop 指令");
 
   return {node_reg, phase_reg};
 }

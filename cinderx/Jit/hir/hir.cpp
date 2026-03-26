@@ -531,6 +531,8 @@ bool Instr::isReplayable() const {
     case Opcode::kOptimizedYieldFrom:
     case Opcode::kInlineIter:
     case Opcode::kYieldFromInline:  // Phase 2: 内联 yield from
+    case Opcode::kStateStackPush:
+    case Opcode::kStateStackPop:
     case Opcode::kYieldFromHandleStopAsyncIteration:
     case Opcode::kYieldValue:
     case Opcode::kXDecref:
@@ -833,6 +835,8 @@ bool isPassthrough(const Instr& instr) {
     case Opcode::kOptimizedYieldFrom:
     case Opcode::kInlineIter:
     case Opcode::kYieldFromInline:  // Phase 2: 内联 yield from
+    case Opcode::kStateStackPush:
+    case Opcode::kStateStackPop:
     case Opcode::kYieldFromHandleStopAsyncIteration:
     case Opcode::kYieldValue:
       return false;
