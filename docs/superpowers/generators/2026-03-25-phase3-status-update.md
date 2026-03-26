@@ -1,245 +1,97 @@
 # Phase 3 状态更新
 
-**日期**: 2026-03-25
-**更新**: Phase 3.1 完成，调整后续计划
+**日期**: 2026-03-26
+**更新**: Phase 3.2 T1-T4 完成，开始实施状态机内联
 
 ---
 
-## 📊 当前状态
+## 当前状态
 
 ### Phase 3.1: 逃逸分析 - ✅ 完成
 
 **完成时间**: 2026-03-25（2 天）
-**状态**: 代码实现完成，测试通过
 **性能改进**: 0.6%（架构限制）
 
-**成果**:
-- ✅ `analyzeGeneratorEscape` 函数实现
-- ✅ 检测 list/set/tuple 消费模式
-- ✅ TDD 测试通过（红→绿）
-- ✅ 代码编译和运行成功
-- ✅ 完整文档
+### Phase 3.2: 状态机内联 - 🚧 进行中（~40%）
+
+**开始时间**: 2026-03-25
+**当前进度**: T1-T4 完成，T5-T7 待实现
+**最新提交**: `d4d38af1` (T4: StateStackPush/Pop 全链路实现)
+
+**已完成**:
+- ✅ T1: 基础设施准备（配置常量、栈布局、测试框架）
+- ✅ T2: StateMachineGenerator 类（7 个基本块方法）
+- ✅ T3: 集成到 TreeIterStateMachinePass（模式检测、YieldFrom 替换、控制流连接）
+- ✅ T4: 栈操作实现（GenDataFooter 栈数组 + StateStackPush/Pop 全链路）
+
+**待完成**:
+- ❌ T5: 状态机逻辑实现（替换 11 个占位符 → 核心阻塞项）
+- ❌ T6: 边界情况处理（depth=0/1/12/15、回退验证）
+- ❌ T7: 最终验证（4-6x 性能目标）
 
 **文档**:
-- [完成报告](diagnostics/2026-03-25-generators-phase3.1-escape-analysis-completion.md)
-- [性能基准](diagnostics/2026-03-25-generators-phase3-benchmark-results.md)
-- [决策记录](decisions/2026-03-25-generators-phase3-choose-simplified-escape-analysis.md)
+- [设计文档](./specs/2026-03-25-phase3.2-state-machine-inlining-design.md)
+- [实施计划](./plans/2026-03-26-phase3.2-state-machine-inlining-implementation-plan.md) ⭐ 最新
+- [Task 4 决策](./decisions/2026-03-26-phase3.2-task4-stack-implementation-decision.md)
 
 ---
 
-## 🔍 架构认知更新
-
-### Phase 3 完整架构
+## Phase 3.2 架构
 
 ```
-┌──────────────────────────────────────────────────────┐
-│ Phase 3.1: 逃逸分析 ✅                               │
-│ ├─ 目标: 检测不可逃逸生成器                          │
-│ ├─ 状态: 完成                                       │
-│ ├─ 时间: 2 天                                       │
-│ └─ 性能: 0.6%                                       │
-└──────────────────────────────────────────────────────┘
-                        ↓
-┌──────────────────────────────────────────────────────┐
-│ Phase 3.2: 状态机内联 ⏳                             │
-│ ├─ 目标: 将生成器帧转换为状态机                      │
-│ ├─ 状态: 未开始                                     │
-│ ├─ 时间: 2-3 周（估计）                             │
-│ └─ 性能: 4-6x（主要来源）⭐                          │
-└──────────────────────────────────────────────────────┘
-                        ↓
-┌──────────────────────────────────────────────────────┐
-│ Phase 3.3: 去虚拟化 ⏳                               │
-│ ├─ 目标: 消除 PyIter_Next 虚函数调用                │
-│ ├─ 状态: 未开始                                     │
-│ ├─ 时间: 1-2 周（估计）                             │
-│ └─ 性能: 额外 2-3x                                  │
-└──────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│ T1-T4: 基础设施 + 框架 + codegen ✅                       │
+│ ├─ TreeIterPhase 枚举、StateMachineConfig 常量           │
+│ ├─ StateMachineGenerator（7 个基本块）                    │
+│ ├─ TreeIterStateMachinePass（模式检测 + 替换）            │
+│ ├─ StateStackPush/Pop HIR/LIR/codegen 全链路             │
+│ └─ GenDataFooter 扩展（state_stack[16]）                 │
+├─────────────────────────────────────────────────────────┤
+│ T5: 状态机逻辑实现 ❌ 核心阻塞项                           │
+│ ├─ 11 个占位符需要替换                                   │
+│ ├─ LoadField 替代 LoadConst（字段访问）                    │
+│ ├─ YieldValue 集成（yield 输出）                          │
+│ ├─ Phase 状态管理（SaveState/Assign）                     │
+│ └─ StackPush/Pop 集成到遍历逻辑                          │
+├─────────────────────────────────────────────────────────┤
+│ T6-T7: 边界测试 + 性能验证 ❌                             │
+│ └─ 目标: 4-6x 性能改进                                   │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### 关键洞察
+### 11 个占位符清单
 
-1. **Phase 3.1 是基础设施**
-   - 主要价值：检测和路由
-   - 性能影响：0-5%
-   - 为 Phase 3.2+3.3 提供前提
-
-2. **Phase 3.2 是性能来源**
-   - 主要价值：消除帧切换开销
-   - 性能影响：4-6x
-   - 需要复杂的代码生成
-
-3. **Phase 3.3 是进一步优化**
-   - 主要价值：消除虚函数调用
-   - 性能影响：额外 2-3x
-   - 需要类型推断和直接访问
-
----
-
-## 🎯 调整后的计划
-
-### 原计划 vs 实际
-
-| 阶段 | 原计划时间 | 实际时间 | 状态 |
-|------|-----------|---------|------|
-| Phase 3.1 | 2-3 天 | 2 天 | ✅ 完成 |
-| Phase 3.2 | 2-3 周 | - | ⏳ 未开始 |
-| Phase 3.3 | 1-2 周 | - | ⏳ 未开始 |
-| **总计** | **5-8 周** | **2 天** | **20% 完成** |
-
-### 为什么停止在 Phase 3.1？
-
-1. **时间投入 vs 价值**
-   - Phase 3.2+3.3: 需要 3-5 周
-   - 学习价值已最大化
-   - 其他工作可能更紧急
-
-2. **架构现实**
-   - Phase 3.1 单独不足以达到性能目标
-   - Phase 3.2 需要深入修改编译器
-   - 风险和复杂度高
-
-3. **替代策略**
-   - 可以使用 Python 层面优化（栈式迭代器）
-   - 可以等待社区实现
-   - 可以在其他项目中应用经验
+| # | 位置 | 当前 | 需要 |
+|---|------|------|------|
+| P1 | InitBlock | `(void)init_phase;` | SaveState |
+| P2 | InitBlock | `(void)zero;` | stack_top = 0 |
+| P3 | LeftBlock | `LoadConst(TObject)` | LoadField(node, "left") |
+| P4 | LeftBlock | `(void)phase_yield;` | Assign(phase_reg) |
+| P5 | LeftBlock | 缺少 StackPush | Push + 更新 current_node |
+| P6 | YieldBlock | `LoadConst(TObject)` | LoadField(node, "value") |
+| P7 | YieldBlock | 无 YieldValue | YieldValue(result) |
+| P8 | YieldBlock | `(void)phase_right;` | Assign(phase_reg) |
+| P9 | RightBlock | `LoadConst(TObject)` | LoadField(node, "right") |
+| P10 | RightBlock | `(void)phase_backtrack;` | Assign(phase_reg) |
+| P11 | RightBlock | 缺少 StackPush | Push + 更新 current_node |
 
 ---
 
-## 📝 成果总结
+## 关键代码文件
 
-### 技术成果
-
-1. **代码实现**
-   - `analyzeGeneratorEscape` 函数（~150 行）
-   - 逃逸检测逻辑
-   - 集成到 simplifyYieldFrom
-
-2. **测试**
-   - TDD 测试套件
-   - 性能基准测试
-   - 正确性验证
-
-3. **文档**
-   - 完成报告
-   - 架构分析
-   - 决策记录
-
-### 学习成果
-
-1. **编译器优化**
-   - 理解逃逸分析概念
-   - 理解生成器性能瓶颈
-   - 理解多阶段优化架构
-
-2. **方法论**
-   - TDD 实践
-   - 决策驱动开发
-   - 架构认知的重要性
-
-3. **工具使用**
-   - CinderX JIT 系统
-   - HIR 指令操作
-   - CMake 构建系统
-
----
-
-## 🚀 后续选项
-
-### 选项 1: 继续 Phase 3（不推荐）
-
-**行动**: 实施 Phase 3.2（状态机内联）
-
-**时间**: 3-5 周
-
-**优点**:
-- 实现完整性能目标（4-6x）
-- 深入学习编译器代码生成
-
-**缺点**:
-- 时间投入巨大
-- 风险高（可能失败）
-- 机会成本高
-
-### 选项 2: Python 层优化（推荐）⭐
-
-**行动**: 实现栈式迭代器（方案 2）
-
-**时间**: 2-3 天
-
-**优点**:
-- 快速实现（~100 行 Python）
-- 立即性能改进（10-12x）
-- 无需修改 JIT
-
-**缺点**:
-- 需要用户修改代码
-- 不是透明优化
-
-### 选项 3: 总结和归档（推荐）⭐
-
-**行动**: 完成项目文档和总结
-
-**时间**: 1-2 天
-
-**优点**:
-- 保留学习成果
-- 为未来工作提供参考
-- 可以切换到其他项目
-
-**缺点**:
-- 未达到性能目标
-- 工作未完全完成
-
----
-
-## 📈 项目整体进度
-
-### Phase 1: YieldFrom 模式识别 - ✅ 完成
-
-- 时间: 1 周
-- 状态: 完成
-- 性能: ~1% 改进
-
-### Phase 2: 状态机生成 - ✅ 完成
-
-- 时间: 2 周
-- 状态: 代码完成
-- 性能: ~0% 改进（仍调用运行时）
-
-### Phase 3.1: 逃逸分析 - ✅ 完成
-
-- 时间: 2 天
-- 状态: 完成
-- 性能: 0.6% 改进
-
-### Phase 3.2+3.3: 深度优化 - ⏳ 未开始
-
-- 时间: 3-5 周（估计）
-- 状态: 未开始
-- 性能: 4-6x（目标）
-
----
-
-## 💡 建议
-
-**短期**（本周）:
-1. ✅ 完成 Phase 3.1 文档
-2. ✅ Git 提交所有代码
-3. 📝 创建项目总结
-
-**中期**（下周）:
-1. 考虑实施 Python 层优化（栈式迭代器）
-2. 或者切换到其他项目
-3. 或者深入 Phase 3.2（如果时间允许）
-
-**长期**（未来）:
-1. 保留 Phase 3.1 代码作为基础
-2. 等待社区或后续资源
-3. 应用经验到其他优化项目
+| 文件 | 说明 |
+|------|------|
+| `cinderx/Jit/hir/tree_iter_state_machine_pass.h` | 状态机 Pass 和生成器声明 |
+| `cinderx/Jit/hir/tree_iter_state_machine_pass.cpp` | 状态机实现（716 行） |
+| `cinderx/Jit/gen_data_footer.h` | GenDataFooter 扩展（StackEntry, state_stack） |
+| `cinderx/Jit/hir/hir_ops.h` | StateStackPush/Pop opcode |
+| `cinderx/Jit/hir/hir.h` | StateStackPush/Pop 指令类 |
+| `cinderx/Jit/lir/instruction.h` | LIR 指令定义 |
+| `cinderx/Jit/lir/generator.cpp` | HIR→LIR 降级 |
+| `cinderx/Jit/codegen/autogen.cpp` | x86_64/ARM64 codegen |
 
 ---
 
 **更新人**: Claude Code
-**日期**: 2026-03-25
-**状态**: Phase 3.1 完成，等待后续决策
+**日期**: 2026-03-26
+**状态**: Phase 3.2 T1-T4 完成，T5 待实现
