@@ -60,3 +60,6 @@ MANIFEST
 # Local development tools
 opencode.json
 uv.lock
+
+# Git worktrees
+.worktrees/
