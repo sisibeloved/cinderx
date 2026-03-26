@@ -367,215 +367,28 @@ const GetIter* extractGetIterFromPhi(Register* iter_reg) {
 void TreeIterStateMachinePass::generateStateMachine(
     Function& func,
     const std::vector<const YieldFrom*>& yield_froms) {
-  JIT_DLOG(
-      "TreeIterStateMachinePass: Generating state machine for {} YieldFroms",
-      yield_froms.size());
+  JIT_LOG("TreeIterStateMachinePass: Generating inline state machine for {} YieldFroms",
+          yield_froms.size());
 
-  // 状态机结构:
-  //   entry -> init (state=0) -> dispatch
-  //   dispatch -> state[0], state[1], ..., done
-  //   state[i] -> yield / next_state
-  //   done -> return None
-
-  // 创建基本块
-  BasicBlock* entry_block = func.cfg.AllocateUnlinkedBlock();
-  BasicBlock* init_block = func.cfg.AllocateUnlinkedBlock();
-  BasicBlock* dispatch_block = func.cfg.AllocateUnlinkedBlock();
-  BasicBlock* done_block = func.cfg.AllocateUnlinkedBlock();
-
-  // 分配状态寄存器
-  Register* state_reg = func.env.AllocateRegister();
-
-  // === Entry Block ===
-  // 加载当前状态
-  entry_block->append<LoadState>(state_reg);
-
-  // 检查是否未初始化 (state == -1)
-  Register* uninit_const = func.env.AllocateRegister();
-  entry_block->append<LoadConst>(uninit_const, Type::fromCInt(-1, TCInt32));
-
-  Register* is_uninit = func.env.AllocateRegister();
-  entry_block->append<PrimitiveCompare>(
-      is_uninit, PrimitiveCompareOp::kEqual, state_reg, uninit_const);
-
-  // 条件跳转到 init 或 dispatch
-  entry_block->append<CondBranch>(is_uninit, init_block, dispatch_block);
-
-  // === Init Block ===
-  // 保存初始状态 (state = 0)
-  Register* init_const = func.env.AllocateRegister();
-  init_block->append<LoadConst>(init_const, Type::fromCInt(0, TCInt32));
-  init_block->append<SaveState>(init_const);
-
-  // 跳转到 dispatch
-  init_block->append<Branch>(dispatch_block);
-
-  // === Done Block ===
-  // 返回 None
-  Register* none_reg = func.env.AllocateRegister();
-  done_block->append<LoadConst>(none_reg, Type::fromObject(Py_None));
-  done_block->append<Return>(none_reg, Type::fromObject(Py_None));
-
-  // === Dispatch Block ===
-  // 创建状态块
-  std::vector<BasicBlock*> state_blocks;
-  int num_states = static_cast<int>(yield_froms.size());
-
-  for (int i = 0; i < num_states; i++) {
-    BasicBlock* state_bb = func.cfg.AllocateUnlinkedBlock();
-    state_blocks.push_back(state_bb);
-
-    const YieldFrom* yf = yield_froms[i];
-
-    // 状态块内容:
-    // 1. 保存下一个状态 (state = i + 1)
-    Register* next_state = func.env.AllocateRegister();
-    state_bb->append<LoadConst>(next_state, Type::fromCInt(i + 1, TCInt32));
-    state_bb->append<SaveState>(next_state);
-
-    // 2. 提取 field 信息和 receiver
-    // YieldFrom 的操作数: [send_value, iter]
-    // iter 可能来自 Phi 节点或直接来自 GetIter(LoadField(self, "left/right"))
-
-    Register* iter_reg = yf->GetOperand(1);
-    if (iter_reg == nullptr) {
-      JIT_DLOG("TreeIterStateMachinePass: Invalid iter operand, skipping");
-      state_bb->append<Branch>(done_block);
-      continue;
-    }
-
-    // 使用辅助函数提取 GetIter（处理 Phi 节点情况）
-    const GetIter* get_iter = extractGetIterFromPhi(iter_reg);
-    if (get_iter == nullptr) {
-      JIT_DLOG("TreeIterStateMachinePass: Could not extract GetIter from iter, skipping");
-      state_bb->append<Branch>(done_block);
-      continue;
-    }
-
-    Register* field_value = get_iter->iterable();
-
-    if (field_value == nullptr || field_value->instr() == nullptr) {
-      JIT_DLOG("TreeIterStateMachinePass: Invalid field_value, skipping");
-      state_bb->append<Branch>(done_block);
-      continue;
-    }
-
-    Instr* field_instr = field_value->instr();
-    if (!field_instr->IsLoadField()) {
-      JIT_DLOG("TreeIterStateMachinePass: field_value is not from LoadField, skipping");
-      state_bb->append<Branch>(done_block);
-      continue;
-    }
-
-    auto* load_field = static_cast<const LoadField*>(field_instr);
-    Register* receiver = load_field->receiver();
-
-    // 3. 生成 YieldFromInline 指令
-    // YieldFromInline(iter, next_state) -> yield 子迭代器的值
-    // iter 已经是 GetIter(LoadField(...)) 的结果
-
-    const FrameState* frame_state = yf->frameState();
-    if (frame_state == nullptr) {
-      JIT_DLOG("TreeIterStateMachinePass: No FrameState for YieldFrom, skipping");
-      state_bb->append<Branch>(done_block);
-      continue;
-    }
-
-    Register* yield_result = func.env.AllocateRegister();
-    state_bb->append<YieldFromInline>(
-        yield_result, iter_reg, next_state, *frame_state);
-
-    // 4. YieldFromInline 返回后，跳转回 dispatch 继续下一次迭代
-    state_bb->append<Branch>(dispatch_block);
+  // 检查内联深度限制
+  if (yield_froms.size() > static_cast<size_t>(StateMachineConfig::kMaxInlineDepth)) {
+    JIT_LOG("  -> Depth {} exceeds limit {}, using fallback",
+            yield_froms.size(), StateMachineConfig::kMaxInlineDepth);
+    return;  // 回退到原有逻辑
   }
 
-  // 构建分发块的条件分支链
-  // state == 0 -> state[0], state == 1 -> state[1], ...
-  BasicBlock* current_bb = dispatch_block;
+  // 创建状态机上下文
+  StateMachineContext ctx;
+  ctx.func = &func;
+  // self_reg 将在 GenerateInitBlock 中通过 LoadArg 指令设置
+  ctx.max_depth = static_cast<int>(yield_froms.size());
+  ctx.stack_size = StateMachineConfig::kStateSize;
 
-  for (int i = 0; i < num_states; i++) {
-    Register* state_const = func.env.AllocateRegister();
-    current_bb->append<LoadConst>(state_const, Type::fromCInt(i, TCInt32));
+  // 生成状态机
+  StateMachineGenerator generator(ctx);
+  generator.Generate();
 
-    Register* is_state = func.env.AllocateRegister();
-    current_bb->append<PrimitiveCompare>(
-        is_state, PrimitiveCompareOp::kEqual, state_reg, state_const);
-
-    BasicBlock* next_check = (i + 1 < num_states)
-        ? func.cfg.AllocateUnlinkedBlock()
-        : done_block;
-
-    current_bb->append<CondBranch>(is_state, state_blocks[i], next_check);
-    current_bb = next_check;
-  }
-
-  JIT_DLOG(
-      "TreeIterStateMachinePass: Generated {} state blocks",
-      state_blocks.size());
-
-  // === 步骤 4: 替换 YieldFrom 指令 ===
-  // 将原始 YieldFrom 替换为跳转到 entry_block
-
-  for (const YieldFrom* yf : yield_froms) {
-    BasicBlock* block = yf->block();
-
-    // 找到 YieldFrom 在块中的位置
-    auto it = block->iterator_to(const_cast<YieldFrom&>(*yf));
-
-    // 删除 YieldFrom 指令
-    // 注意：这会将该指令从控制流中移除
-    Instr* yf_mutable = const_cast<YieldFrom*>(yf);
-    yf_mutable->unlink();
-    delete yf_mutable;
-  }
-
-  JIT_DLOG(
-      "TreeIterStateMachinePass: Replaced {} YieldFrom instructions",
-      yield_froms.size());
-
-  // === 连接状态机到控制流 ===
-  // 找到生成器函数的入口块（包含 InitialYield 的块）
-  BasicBlock* generator_entry = func.cfg.entry_block;
-  if (generator_entry == nullptr) {
-    JIT_DLOG("TreeIterStateMachinePass: No entry block found");
-    return;
-  }
-
-  // 查找 InitialYield 指令
-  Instr* initial_yield = nullptr;
-  for (auto& instr : *generator_entry) {
-    if (instr.IsInitialYield()) {
-      initial_yield = &instr;
-      break;
-    }
-  }
-
-  if (initial_yield == nullptr) {
-    JIT_DLOG("TreeIterStateMachinePass: No InitialYield found, skipping");
-    return;
-  }
-
-  // 在 InitialYield 之后分割基本块
-  BasicBlock* after_init = func.cfg.splitAfter(*initial_yield);
-
-  // generator_entry (Block 0) 现在只包含 InitialYield，需要添加跳转到 after_init
-  generator_entry->append<Branch>(after_init);
-
-  // 将 after_init 连接到状态机 entry
-  // after_init 的第一条指令应该是一个 terminator
-  // 我们需要将它替换为跳转到 entry_block
-  Instr* term = after_init->GetTerminator();
-  if (term != nullptr) {
-    term->unlink();
-    delete term;
-  }
-  after_init->append<Branch>(entry_block);
-
-  // 将 done_block 连接到原始的生成器退出点
-  // done_block 已经包含 Return(None)，这是正确的
-
-  JIT_DLOG(
-      "TreeIterStateMachinePass: State machine connected to control flow");
+  JIT_LOG("TreeIterStateMachinePass: State machine generated successfully");
 }
 
 // === StateMachineGenerator 实现 ===
