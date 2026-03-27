@@ -1237,6 +1237,14 @@ PyObject* JITRT_Vectorcall(
     PyObject* const* args,
     size_t nargsf,
     PyObject* kwnames) {
+  // Handle the LOAD_METHOD case where the callable slot is NULL/None and
+  // the actual callable is the first argument.
+  if (callable == nullptr || Py_IsNone(callable)) {
+    callable = args[0];
+    args += 1;
+    nargsf -= 1;
+  }
+
   PyThreadState* tstate = _PyThreadState_GET();
   if (PyFunction_Check(callable)) {
     auto* func = reinterpret_cast<PyFunctionObject*>(callable);
