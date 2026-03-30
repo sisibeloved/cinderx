@@ -447,9 +447,18 @@ Type outputType(
       return TBool;
     }
 
-    case Opcode::kStateStackPop: {
+    case Opcode::kStateStackPop:
       return TObject;
-    }
+
+    case Opcode::kLoadPoppedPhase:
+    case Opcode::kLoadStackTop:
+      return TCInt32;
+
+    case Opcode::kLoadCurrentNode:
+      return TObject;
+
+    case Opcode::kLoadPhase:
+      return TCInt32;
 
     case Opcode::kPrimitiveBox: {
       // This duplicates the logic in Type::asBoxed(), but it has enough
@@ -554,6 +563,9 @@ Type outputType(
     case Opcode::kSetCellItem:
     case Opcode::kSetFunctionAttr:
     case Opcode::kSnapshot:
+    case Opcode::kStateStackPush:
+    case Opcode::kSaveCurrentNode:
+    case Opcode::kSavePhase:
     case Opcode::kStoreArrayItem:
     case Opcode::kStoreAttr:
     case Opcode::kStoreAttrCached:
