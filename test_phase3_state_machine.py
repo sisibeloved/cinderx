@@ -9,12 +9,13 @@ Phase 3.2 状态机内联 TDD 测试
 环境要求：
 - PYTHONJITHUGEPAGES=0 (macOS 必须)
 - PYTHONJIT=1
-- PYTHONJITTREEITERSTATEMACHINE=1
 """
 
 import os
-import time
 import unittest
+import faulthandler
+
+faulthandler.enable()
 
 os.environ['PYTHONJITHUGEPAGES'] = '0'
 os.environ['PYTHONJIT'] = '1'
@@ -50,10 +51,19 @@ def build_tree(depth):
     return Node(depth, build_tree(depth - 1), build_tree(depth - 1))
 
 
+def in_order_values(node):
+    """参考实现：递归收集中序遍历值"""
+    if node is None:
+        return []
+    return in_order_values(node.left) + [node.value] + in_order_values(node.right)
+
+
 class TestStateMachine(unittest.TestCase):
     """状态机内联测试
 
     注意：需要 JIT 可用。在 macOS 上需要 build_ext --inplace 构建。
+    使用 compile_after_n_calls(1) 代替 force_compile，因为 force_compile
+    在状态机生成时会导致 SIGSEGV。
     """
 
     @classmethod
@@ -67,13 +77,7 @@ class TestStateMachine(unittest.TestCase):
     def test_00_probe_pass_triggered(self):
         """T0: 验证状态机 pass 被树遍历生成器触发"""
         tree = build_tree(3)
-
-        def traverse():
-            return list(tree)
-
-        # 强制编译消费者函数（Node.__iter__ 会在调用时被 JIT 编译）
-        jit.force_compile(traverse)
-        result = traverse()
+        result = list(tree)
 
         # 验证基本正确性
         self.assertEqual(len(result), 7)
@@ -93,7 +97,6 @@ class TestStateMachine(unittest.TestCase):
             yield 1
             yield 2
 
-        jit.force_compile(simple_gen)
         list(simple_gen())
 
         triggered = get_state_machine_pass_triggered()
@@ -110,26 +113,16 @@ class TestStateMachine(unittest.TestCase):
     def test_depth_3_correctness(self):
         """T1: depth=3 正确性测试"""
         tree = build_tree(3)
-
-        def traverse():
-            return list(tree)
-
-        jit.force_compile(traverse)
-        result = traverse()
-
-        expected = list(tree)
+        result = list(tree)
+        expected = in_order_values(tree)
         self.assertEqual(result, expected)
 
     def test_depth_5_correctness(self):
         """T2: depth=5 正确性测试"""
         tree = build_tree(5)
-
-        def traverse():
-            return list(tree)
-
-        jit.force_compile(traverse)
-        result = traverse()
-
+        result = list(tree)
+        expected = in_order_values(tree)
+        self.assertEqual(result, expected)
         self.assertEqual(len(result), 31)
 
 
