@@ -204,6 +204,31 @@ Plan B 直接通过 FP 偏移量访问字段，消除所有 C 调用开销。
 
 ---
 
+## pyperformance bm_generators 实测
+
+使用 pyperformance bm_generators 用例（`Tree.__iter__` + 100000 节点二叉树）验证：
+
+**前提**: 需要 `jit.compile_after_n_calls(1)` 主动触发 JIT 编译，否则生成器函数不被编译。
+
+### macOS ARM64
+
+| 节点数 | SM OFF | SM ON | 加速比 |
+|--------|--------|-------|--------|
+| 100 | 0.03ms | 0.01ms | 3x |
+| 1,000 | 0.33ms | 0.06ms | 5.5x |
+| 4,000 | 2.07ms | 0.26ms | 8x |
+| 10,000 | 5.80ms | 0.63ms | 9.2x |
+| 50,000 | 31.6ms | 3.36ms | 9.4x |
+| **100,000** | **65.1ms** | **6.64ms** | **9.8x** |
+
+### 适用范围
+
+当前状态机仅匹配 `yield from self.left/right` 的二叉树递归模式。
+在 pyperformance benchmarks 中，只有 `bm_generators` 受益；
+`bm_async_generators` 使用 `async for` + `__aiter__`，模式不同，不受影响。
+
+---
+
 ## 后续优化方向
 
 ### 短期
@@ -211,16 +236,16 @@ Plan B 直接通过 FP 偏移量访问字段，消除所有 C 调用开销。
 
 ### 中期
 - deopt 支持（当前 YieldValue 用复制的 FrameState）
-- hasArbitraryExecution 优化（减少不必要的 clobber 标记）
-- StateStackPush/Pop 改为内联 codegen（目前仍为 C 调用）
+- hasArbitraryExecution 优化（减少不必要的 clobber 标记）— 预期 5-15%
+- StateStackPush/Pop 改为内联 codegen（目前仍为 C 调用）— 预期 10-20%
 
 ### 长期
 - 栈容量动态扩展（当前固定 16 entries）
-- Phase 3.3: 去虚拟化（类型推断 + 直接字段访问）
+- Phase 3.3: 去虚拟化（类型推断 + 直接字段访问）— 预期额外 2-3x
 - 通用化：支持非树结构的递归生成器
 
 ---
 
 **更新人**: Claude Code
 **日期**: 2026-03-31
-**状态**: Phase 3.2 ✅ 完成，双平台验证通过，4-12x 性能超越目标达成
+**状态**: Phase 3.2 ✅ 完成，bm_generators 实测 9.8x 加速
