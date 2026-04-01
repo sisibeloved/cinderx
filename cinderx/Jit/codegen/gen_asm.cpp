@@ -982,17 +982,18 @@ void* generateDeoptTrampoline(bool generator_mode) {
   // registers.
   a.mov(a64::x0, a64::sp);
 
-  const int stage1_deopt_idx_offset =
+  const int stage1_saved_fp_offset = 6 * kPointerSize;
+  const int stage1_deopt_idx_input_offset =
       generator_mode ? 7 * kPointerSize : 6 * kPointerSize;
-  const int stage1_saved_pc_offset =
+  const int stage1_saved_pc_input_offset =
       generator_mode ? 6 * kPointerSize : 7 * kPointerSize;
-  a.ldr(deopt_idx, a64::ptr(meta_base, stage1_deopt_idx_offset));
-  a.ldr(saved_pc, a64::ptr(meta_base, stage1_saved_pc_offset));
+  a.ldr(deopt_idx, a64::ptr(meta_base, stage1_deopt_idx_input_offset));
+  a.ldr(saved_pc, a64::ptr(meta_base, stage1_saved_pc_input_offset));
   emit_aarch64_generator_trace(1);
 
   // Save the frame pointer and set up our frame.
-  a.str(arch::fp, a64::ptr(meta_base, stage1_deopt_idx_offset));
-  a.add(arch::fp, meta_base, stage1_deopt_idx_offset);
+  a.str(arch::fp, a64::ptr(meta_base, stage1_saved_fp_offset));
+  a.add(arch::fp, meta_base, stage1_saved_fp_offset);
   emit_aarch64_generator_trace(2);
 
   // Save the pc to its canonical slot next to the saved frame pointer.
@@ -1006,7 +1007,6 @@ void* generateDeoptTrampoline(bool generator_mode) {
       arch::ptr_resolve(&a, arch::fp, -2 * kPointerSize, arch::reg_scratch_0);
   a.str(deopt_idx, deopt_idx_addr);
 
-  // Fetch the CodeRuntime address from the stack.
   auto code_rt_addr =
       arch::ptr_resolve(&a, arch::fp, -3 * kPointerSize, arch::reg_scratch_0);
   auto code_rt = a64::x1;

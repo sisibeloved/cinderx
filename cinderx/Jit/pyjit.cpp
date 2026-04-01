@@ -204,6 +204,31 @@ bool codeIsInNonBenchmarkSitePackages(BorrowedRef<PyCodeObject> code) {
   return in_site_packages && !codeIsInPyperformanceBenchmark(code);
 }
 
+bool codeHasSyntheticOrigin(BorrowedRef<PyCodeObject> code) {
+  if (code == nullptr) {
+    return false;
+  }
+
+  if (code->co_filename == nullptr || !PyUnicode_Check(code->co_filename)) {
+    return true;
+  }
+
+  const char* filename = PyUnicode_AsUTF8(code->co_filename);
+  if (filename == nullptr) {
+    PyErr_Clear();
+    return true;
+  }
+
+  std::string_view path = filename;
+  bool has_path_sep = path.find('/') != std::string_view::npos ||
+      path.find('\\') != std::string_view::npos;
+  bool looks_like_python_file =
+      path.ends_with(".py") || path.ends_with(".pyc") ||
+      path.ends_with(".pyo");
+  return path.starts_with("<") || path.starts_with("memory:") ||
+      (!has_path_sep && !looks_like_python_file);
+}
+
 bool codeIsInStdlib(BorrowedRef<PyCodeObject> code) {
   if (code == nullptr || code->co_filename == nullptr ||
       !PyUnicode_Check(code->co_filename)) {
@@ -246,7 +271,8 @@ bool shouldDeferPyperformanceStartupCompile(BorrowedRef<PyCodeObject> code) {
     return true;
   }
 
-  return codeIsInStdlib(code) || codeIsInFrozenStdlib(code);
+  return codeHasSyntheticOrigin(code) || codeIsInStdlib(code) ||
+      codeIsInFrozenStdlib(code);
 }
 
 // If functions in the cinderx module get compiled, they will somehow keep the
