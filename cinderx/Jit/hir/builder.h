@@ -463,6 +463,7 @@ class HIRBuilder {
       TranslationContext& tc,
       const jit::BytecodeInstruction& bc_instr);
   void emitYieldFrom(TranslationContext& tc, Register* out);
+  bool canInlineYieldFrom(Register* iter_reg);
   void emitDispatchEagerCoroResult(
       CFG& cfg,
       TranslationContext& tc,
@@ -651,5 +652,12 @@ class HIRBuilder {
   std::optional<PendingMethodWithValuesCall> pending_method_with_values_call_;
   bool stop_block_translation_{false};
 };
+
+} // namespace jit::hir
+
+namespace jit::hir {
+
+// 预缓存 array.array 类型（必须在 JIT 初始化期间调用，GIL 持有时安全）
+void precacheStdlibArray();
 
 } // namespace jit::hir

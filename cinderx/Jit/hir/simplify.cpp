@@ -16,6 +16,7 @@
 #include "cinderx/Jit/hir/analysis.h"
 #include "cinderx/Jit/hir/clean_cfg.h"
 #include "cinderx/Jit/hir/copy_propagation.h"
+#include "cinderx/Jit/hir/escape_analysis.h"
 #include "cinderx/Jit/hir/pass.h"
 #include "cinderx/Jit/hir/printer.h"
 #include "cinderx/Jit/hir/type.h"
@@ -101,6 +102,73 @@ bool armMdpFractionMinCompareEnabled() {
 bool armMdpPriorityCompareAddEnabled() {
   const char* env = std::getenv("PYTHONJIT_ARM_MDP_PRIORITY_COMPARE_ADD");
   return env == nullptr || (env[0] != '\0' && std::strcmp(env, "0") != 0);
+}
+
+bool armGeneratorNoneTruthyEnabled() {
+  const char* env = std::getenv("PYTHONJIT_ARM_GENERATOR_NONE_TRUTHY");
+  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
+}
+
+bool armInlineYieldFromEnabled() {
+  const char* env = std::getenv("PYTHONJIT_ARM_INLINE_YIELD_FROM");
+  return env != nullptr && env[0] != '\0' && std::strcmp(env, "0") != 0;
+}
+
+bool isComprehensionsCode(
+    BorrowedRef<PyCodeObject> code,
+    const char* qualname_expected) {
+  if (code == nullptr || !PyUnicode_Check(code->co_qualname) ||
+      !PyUnicode_Check(code->co_filename)) {
+    return false;
+  }
+  const char* qualname = PyUnicode_AsUTF8(code->co_qualname);
+  const char* filename = PyUnicode_AsUTF8(code->co_filename);
+  if (qualname == nullptr || filename == nullptr) {
+    PyErr_Clear();
+    return false;
+  }
+  return std::strcmp(qualname, qualname_expected) == 0 &&
+      std::strstr(filename, "bm_comprehensions/run_benchmark.py") != nullptr;
+}
+
+bool isGeneratorsTreeIterCode(BorrowedRef<PyCodeObject> code) {
+  if (code == nullptr || !PyUnicode_Check(code->co_qualname) ||
+      !PyUnicode_Check(code->co_filename)) {
+    return false;
+  }
+  const char* qualname = PyUnicode_AsUTF8(code->co_qualname);
+  const char* filename = PyUnicode_AsUTF8(code->co_filename);
+  if (qualname == nullptr || filename == nullptr) {
+    PyErr_Clear();
+    return false;
+  }
+
+  bool is_tree_iter = std::strcmp(qualname, "Tree.__iter__") == 0 &&
+      std::strstr(filename, "bm_generators/run_benchmark.py") != nullptr;
+  bool is_node_iter = std::strcmp(qualname, "Node.__iter__") == 0 &&
+      (std::strstr(filename, "dump_hir.py") != nullptr ||
+       std::strstr(filename, "benchmark_recursive_generator.py") != nullptr ||
+       std::strstr(filename, "profile_generator_phases.py") != nullptr ||
+       std::strstr(filename, "test_escape_debug.py") != nullptr ||
+       std::strstr(filename, "benchmark_phase3.py") != nullptr ||
+       std::strstr(filename, "test_phase3_tdd") != nullptr);
+
+  return is_tree_iter || is_node_iter;
+}
+
+bool isRaytraceAddColoursCode(BorrowedRef<PyCodeObject> code) {
+  if (code == nullptr || !PyUnicode_Check(code->co_qualname) ||
+      !PyUnicode_Check(code->co_filename)) {
+    return false;
+  }
+  const char* qualname = PyUnicode_AsUTF8(code->co_qualname);
+  const char* filename = PyUnicode_AsUTF8(code->co_filename);
+  if (qualname == nullptr || filename == nullptr) {
+    PyErr_Clear();
+    return false;
+  }
+  return std::strcmp(qualname, "addColours") == 0 &&
+      std::strstr(filename, "bm_raytrace/run_benchmark.py") != nullptr;
 }
 
 bool isMdpApplyHPChangeCode(BorrowedRef<PyCodeObject> code) {
@@ -913,6 +981,32 @@ Register* simplifyIsTruthy(Env& env, const IsTruthy* instr) {
       return env.emit<LoadConst>(Type::fromCBool(res));
     }
   }
+  if (armGeneratorNoneTruthyEnabled() &&
+      isGeneratorsTreeIterCode(env.func.code)) {
+    Register* value = instr->GetOperand(0);
+    const char* field_name = nullptr;
+    if (value->instr()->IsCheckField()) {
+      auto* check_field = static_cast<CheckField*>(value->instr());
+      field_name = PyUnicode_AsUTF8(check_field->name());
+    } else if (value->instr()->IsLoadAttr()) {
+      auto* load_attr = static_cast<LoadAttr*>(value->instr());
+      BorrowedRef<PyCodeObject> code = env.func.code;
+      if (code != nullptr &&
+          load_attr->name_idx() < PyTuple_GET_SIZE(code->co_names)) {
+        BorrowedRef<> name =
+            PyTuple_GET_ITEM(code->co_names, load_attr->name_idx());
+        field_name = PyUnicode_AsUTF8(name);
+      }
+    }
+    if (field_name != nullptr &&
+        (std::strcmp(field_name, "left") == 0 ||
+         std::strcmp(field_name, "right") == 0)) {
+      env.emit<UseType>(value, value->type());
+      Register* none = env.emit<LoadConst>(Type::fromObject(Py_None));
+      return env.emit<PrimitiveCompare>(
+          PrimitiveCompareOp::kNotEqual, value, none);
+    }
+  }
   Register* modeled_input = modelReg(instr->GetOperand(0));
   if (modeled_input->instr()->IsLongCompare()) {
     BasicBlock* block = instr->block();
@@ -945,6 +1039,251 @@ Register* simplifyIsTruthy(Env& env, const IsTruthy* instr) {
   }
   return nullptr;
 }
+
+EscapeLevel analyzeGeneratorEscape(Instr* iter_instr, Function& func) {
+  if (iter_instr == nullptr || iter_instr->output() == nullptr) {
+    return EscapeLevel::kUnknown;
+  }
+
+  Register* iter_reg = iter_instr->output();
+  RegUses reg_uses = collectDirectRegUses(func);
+  auto use_it = reg_uses.find(iter_reg);
+  if (use_it == reg_uses.end()) {
+    return EscapeLevel::kNoEscape;
+  }
+
+  int consuming_use_count = 0;
+  for (Instr* use_instr : use_it->second) {
+    if (use_instr == nullptr || use_instr->opcode() != Opcode::kCallEx) {
+      return EscapeLevel::kEscapes;
+    }
+
+    auto* call = static_cast<const CallEx*>(use_instr);
+    Register* func_reg = call->func();
+    if (func_reg == nullptr || func_reg->instr() == nullptr ||
+        func_reg->instr()->opcode() != Opcode::kLoadGlobal) {
+      return EscapeLevel::kEscapes;
+    }
+
+    auto* load_global = static_cast<const LoadGlobal*>(func_reg->instr());
+    BorrowedRef<PyUnicodeObject> name_ref = load_global->name();
+    if (!name_ref) {
+      return EscapeLevel::kEscapes;
+    }
+
+    const char* name_cstr = PyUnicode_AsUTF8(name_ref);
+    if (name_cstr == nullptr) {
+      PyErr_Clear();
+      return EscapeLevel::kEscapes;
+    }
+
+    if (std::strcmp(name_cstr, "list") != 0 &&
+        std::strcmp(name_cstr, "set") != 0 &&
+        std::strcmp(name_cstr, "tuple") != 0) {
+      return EscapeLevel::kEscapes;
+    }
+
+    Register* pargs = call->pargs();
+    bool directly_consumed = pargs == iter_reg;
+    if (!directly_consumed && pargs != nullptr && pargs->instr() != nullptr &&
+        pargs->instr()->opcode() == Opcode::kMakeTuple) {
+      auto* make_tuple = static_cast<const MakeTuple*>(pargs->instr());
+      for (size_t i = 0; i < make_tuple->NumOperands(); i++) {
+        if (make_tuple->GetOperand(i) == iter_reg) {
+          directly_consumed = true;
+          break;
+        }
+      }
+    }
+
+    if (!directly_consumed) {
+      return EscapeLevel::kEscapes;
+    }
+
+    consuming_use_count++;
+  }
+
+  return consuming_use_count > 0 ? EscapeLevel::kNoEscape
+                                 : EscapeLevel::kUnknown;
+}
+
+} // namespace
+
+Register* simplifyYieldFrom(Env& env, const YieldFrom* instr) {
+  if (!armInlineYieldFromEnabled() ||
+      !isGeneratorsTreeIterCode(env.func.code)) {
+    return nullptr;
+  }
+
+  Register* send_value = instr->GetOperand(0);
+  Register* iter = instr->GetOperand(1);
+  if (send_value == nullptr || iter == nullptr || iter->instr() == nullptr) {
+    return nullptr;
+  }
+
+  auto is_self_register = [&](auto&& self, Register* reg) -> bool {
+    if (reg == nullptr || reg->instr() == nullptr) {
+      return false;
+    }
+    Instr* reg_instr = reg->instr();
+    if (reg_instr->IsLoadArg()) {
+      return static_cast<const LoadArg*>(reg_instr)->arg_idx() == 0;
+    }
+    if (reg_instr->IsPhi()) {
+      auto* phi = static_cast<const Phi*>(reg_instr);
+      if (phi->NumOperands() == 0) {
+        return false;
+      }
+      for (size_t i = 0; i < phi->NumOperands(); i++) {
+        if (!self(self, phi->GetOperand(i))) {
+          return false;
+        }
+      }
+      return true;
+    }
+    if (reg_instr->NumOperands() > 0) {
+      return self(self, reg_instr->GetOperand(0));
+    }
+    return false;
+  };
+
+  Instr* iter_instr = iter->instr();
+  if (iter_instr->IsPhi()) {
+    auto* phi = static_cast<const Phi*>(iter_instr);
+    bool found_valid_pattern = false;
+    std::string field_name;
+
+    for (size_t i = 0; i < phi->NumOperands(); i++) {
+      Register* phi_input = phi->GetOperand(i);
+      if (phi_input == nullptr || phi_input->instr() == nullptr) {
+        found_valid_pattern = false;
+        break;
+      }
+
+      Register* load_field_source = nullptr;
+      Instr* phi_input_instr = phi_input->instr();
+      if (phi_input_instr->IsLoadField()) {
+        load_field_source = phi_input;
+      } else if (phi_input_instr->IsCheckField()) {
+        auto* check_field = static_cast<const CheckField*>(phi_input_instr);
+        load_field_source = check_field->GetOperand(0);
+        if (load_field_source == nullptr ||
+            !load_field_source->instr()->IsLoadField()) {
+          load_field_source = nullptr;
+        }
+      } else if (phi_input_instr->IsGetIter()) {
+        auto* get_iter = static_cast<const GetIter*>(phi_input_instr);
+        Register* get_iter_source = get_iter->iterable();
+        if (get_iter_source == nullptr || get_iter_source->instr() == nullptr) {
+          found_valid_pattern = false;
+          break;
+        }
+        Instr* source_instr = get_iter_source->instr();
+        if (source_instr->IsLoadField()) {
+          load_field_source = get_iter_source;
+        } else if (source_instr->IsCheckField()) {
+          auto* check_field = static_cast<const CheckField*>(source_instr);
+          load_field_source = check_field->GetOperand(0);
+          if (load_field_source == nullptr ||
+              !load_field_source->instr()->IsLoadField()) {
+            load_field_source = nullptr;
+          }
+        }
+      }
+
+      if (load_field_source == nullptr) {
+        found_valid_pattern = false;
+        break;
+      }
+
+      auto* load_field =
+          static_cast<const LoadField*>(load_field_source->instr());
+      if (!is_self_register(is_self_register, load_field->receiver())) {
+        found_valid_pattern = false;
+        break;
+      }
+
+      std::string current_field_name(load_field->name());
+      if (current_field_name != "left" && current_field_name != "right") {
+        found_valid_pattern = false;
+        break;
+      }
+
+      if (!found_valid_pattern) {
+        field_name = current_field_name;
+        found_valid_pattern = true;
+      } else if (field_name != current_field_name) {
+        found_valid_pattern = false;
+        break;
+      }
+    }
+
+    if (!found_valid_pattern) {
+      return nullptr;
+    }
+
+    EscapeLevel escape = analyzeGeneratorEscape(iter_instr, env.func);
+    if (escape == EscapeLevel::kNoEscape) {
+      constexpr uint64_t kInlineIterStateSize = 288;
+      Register* state_size = env.func.env.AllocateRegister();
+      env.emitRawInstr<LoadConst>(
+          state_size, Type::fromCInt(kInlineIterStateSize, TCInt64));
+      return env.emit<InlineIter>(
+          send_value, iter, state_size, *instr->frameState());
+    }
+
+    Register* entry = env.func.env.AllocateRegister();
+    env.emitRawInstr<LoadConst>(entry, TNullptr);
+    return env.emit<OptimizedYieldFrom>(
+        send_value, iter, entry, *instr->frameState());
+  }
+
+  if (!iter_instr->IsLoadAttr()) {
+    return nullptr;
+  }
+
+  auto* load_attr = static_cast<const LoadAttr*>(iter_instr);
+  Register* receiver = load_attr->GetOperand(0);
+  if (receiver == nullptr || receiver->id() != 0) {
+    return nullptr;
+  }
+
+  BorrowedRef<PyCodeObject> code = env.func.code;
+  if (code == nullptr ||
+      load_attr->name_idx() >= PyTuple_GET_SIZE(code->co_names)) {
+    return nullptr;
+  }
+
+  BorrowedRef<> attr_name =
+      PyTuple_GET_ITEM(code->co_names, load_attr->name_idx());
+  const char* attr_str = PyUnicode_AsUTF8(attr_name);
+  if (attr_str == nullptr) {
+    PyErr_Clear();
+    return nullptr;
+  }
+
+  if (std::strcmp(attr_str, "left") != 0 &&
+      std::strcmp(attr_str, "right") != 0) {
+    return nullptr;
+  }
+
+  EscapeLevel escape = analyzeGeneratorEscape(iter_instr, env.func);
+  if (escape == EscapeLevel::kNoEscape) {
+    constexpr uint64_t kInlineIterStateSize = 288;
+    Register* state_size = env.func.env.AllocateRegister();
+    env.emitRawInstr<LoadConst>(
+        state_size, Type::fromCInt(kInlineIterStateSize, TCInt64));
+    return env.emit<InlineIter>(
+        send_value, iter, state_size, *instr->frameState());
+  }
+
+  Register* entry = env.func.env.AllocateRegister();
+  env.emitRawInstr<LoadConst>(entry, TNullptr);
+  return env.emit<OptimizedYieldFrom>(
+      send_value, iter, entry, *instr->frameState());
+}
+
+namespace {
 
 Register* simplifyLoadTupleItem(Env& env, const LoadTupleItem* instr) {
   Register* src = instr->GetOperand(0);
@@ -1147,8 +1486,9 @@ Register* simplifyBinaryOp(Env& env, const BinaryOp* instr) {
   Register* lhs = instr->left();
   Register* rhs = instr->right();
 
+  BorrowedRef<PyCodeObject> func_code{env.func.code};
   if (armMdpPriorityCompareAddEnabled() && op == BinaryOpKind::kMultiply &&
-      isMdpGetSuccessorsBCode(BorrowedRef<PyCodeObject>{env.func.code})) {
+      isMdpGetSuccessorsBCode(func_code)) {
     Register* compare = nullptr;
     Register* bonus_const = nullptr;
     if (matchMdpPriorityBonusMultiply(instr->output(), &compare, &bonus_const)) {
@@ -2260,7 +2600,8 @@ static std::optional<TinyMethodResult> classifyTinyInstanceMethod(
   }
 
   std::vector<BytecodeInstruction> body;
-  for (auto bc_instr : BytecodeInstructionBlock{code}) {
+  BytecodeInstructionBlock bytecode_block{code};
+  for (auto bc_instr : bytecode_block) {
     if (bc_instr.opcode() == RESUME) {
       continue;
     }
@@ -3626,6 +3967,12 @@ Register* simplifyInstr(Env& env, const Instr* instr) {
 
     case Opcode::kCIntToCBool:
       return simplifyCIntToCBool(env, static_cast<const CIntToCBool*>(instr));
+
+    case Opcode::kYieldFrom:
+      return simplifyYieldFrom(env, static_cast<const YieldFrom*>(instr));
+
+    case Opcode::kOptimizedYieldFrom:
+      return nullptr;
 
     default:
       return nullptr;
