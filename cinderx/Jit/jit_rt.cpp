@@ -2431,6 +2431,12 @@ void JITRT_BatchDecref(PyObject** args, int nargs) {
   }
 }
 
+void JITRT_BatchIncref(PyObject** args, int nargs) {
+  for (int i = 0; i < nargs; i++) {
+    Py_INCREF(args[i]);
+  }
+}
+
 Py_ssize_t JITRT_CheckSequenceBounds(PyObject* s, Py_ssize_t i) {
   JIT_DCHECK(!PyErr_Occurred(), "called with error set");
   i = i < 0 ? i + Py_SIZE(s) : i;

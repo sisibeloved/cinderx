@@ -1290,6 +1290,53 @@ void optimizeLongDecrefRuns(Function& irfunc) {
   }
 }
 
+void optimizeLongIncrefRuns(Function& irfunc) {
+  constexpr int kMinimumNumberOfIncrefsToOptimize = 3;
+
+  auto get_number_of_increfs = [](auto block, auto cur_iter) {
+    int result = 0;
+    while (cur_iter != block->end()) {
+      if (!cur_iter->IsIncref()) {
+        break;
+      }
+      result++;
+      ++cur_iter;
+    }
+    return result;
+  };
+
+  for (auto& block : irfunc.cfg.GetRPOTraversal()) {
+    auto cur_iter = block->begin();
+
+    while (cur_iter != block->end()) {
+      if (!cur_iter->IsIncref()) {
+        ++cur_iter;
+        continue;
+      }
+
+      int num = get_number_of_increfs(block, cur_iter);
+      if (num < kMinimumNumberOfIncrefsToOptimize) {
+        std::advance(cur_iter, num);
+        continue;
+      }
+
+      auto batch_incref = BatchIncref::create(num);
+      batch_incref->copyBytecodeOffset(*cur_iter);
+      batch_incref->InsertBefore(*cur_iter);
+
+      for (int i = 0; i < num; i++) {
+        JIT_CHECK(
+            cur_iter->IsIncref(),
+            "An unexpected non-incref instruction in an incref run.");
+        batch_incref->SetOperand(i, cur_iter->GetOperand(0));
+        auto old_instr = cur_iter++;
+        old_instr->unlink();
+        delete &(*old_instr);
+      }
+    }
+  }
+}
+
 int countUses(const Function& func, const Register* reg) {
   int uses = 0;
   for (auto& block : func.cfg.blocks) {
@@ -1448,6 +1495,7 @@ void RefcountInsertion::Run(Function& func) {
 
   // Optimize long decref runs
   optimizeLongDecrefRuns(func);
+  optimizeLongIncrefRuns(func);
   elideDeadBuiltinMathSqrtLoads(func);
 }
 

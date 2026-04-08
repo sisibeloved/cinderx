@@ -11,6 +11,7 @@ namespace jit::hir {
 #define FOREACH_OPCODE(V)              \
   V(Assign)                            \
   V(BatchDecref)                       \
+  V(BatchIncref)                       \
   V(BeginInlinedFunction)              \
   V(BinaryOp)                          \
   V(BitCast)                           \

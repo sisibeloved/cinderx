@@ -211,6 +211,9 @@ MemoryEffects memoryEffects(const Instr& inst) {
     case Opcode::kBatchDecref:
       return {false, AEmpty, {1, 1}, AManagedHeapAny};
 
+    case Opcode::kBatchIncref:
+      return {false, AEmpty, {inst.NumOperands()}, AOther};
+
     case Opcode::kDecref:
     case Opcode::kXDecref: {
       if (inst.GetOperand(0)->type().runtimePyTypeDestructor().has_value()) {

@@ -614,6 +614,9 @@ int JITRT_RichCompareBool(PyObject* v, PyObject* w, int op);
 /* perform a batch decref to the objects in args */
 void JITRT_BatchDecref(PyObject** args, int nargs);
 
+/* perform a batch incref to the objects in args */
+void JITRT_BatchIncref(PyObject** args, int nargs);
+
 /* Check that `i` is within the bounds of `seq`.
  *
  * A negative value of `i` is an index relative to the end of the

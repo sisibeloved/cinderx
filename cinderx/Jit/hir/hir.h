@@ -2332,6 +2332,9 @@ DEFINE_SIMPLE_INSTR(XIncref, (TOptObject), Operands<1>);
 // batch decrement references
 DEFINE_SIMPLE_INSTR(BatchDecref, (TObject), Operands<>);
 
+// batch increment references
+DEFINE_SIMPLE_INSTR(BatchIncref, (TObject), Operands<>);
+
 class DeoptBaseWithNameIdx : public DeoptBase {
  public:
   DeoptBaseWithNameIdx(Opcode op, int name_idx)

@@ -1982,6 +1982,17 @@ LIRGenerator::TranslatedBlock LIRGenerator::TranslateOneBasicBlock(
 
         break;
       }
+      case Opcode::kBatchIncref: {
+        auto instr = static_cast<const BatchIncref*>(&i);
+
+        Instruction* lir = bbb.appendInstr(Instruction::kVarArgCall);
+        lir->addOperands(Imm{reinterpret_cast<uint64_t>(JITRT_BatchIncref)});
+        for (hir::Register* arg : instr->GetOperands()) {
+          lir->addOperands(VReg{bbb.getDefInstr(arg)});
+        }
+
+        break;
+      }
       case Opcode::kDeopt: {
         appendGuardAlwaysFail(bbb, static_cast<const DeoptBase&>(i));
         break;
