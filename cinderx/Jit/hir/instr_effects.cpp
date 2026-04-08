@@ -550,12 +550,25 @@ bool hasArbitraryExecution(const Instr& inst) {
     case Opcode::kUnaryOp:
     case Opcode::kUnpackExToTuple:
     case Opcode::kVectorCall:
-    case Opcode::kXDecref:
     case Opcode::kYieldAndYieldFrom:
     case Opcode::kYieldFrom:
     case Opcode::kYieldFromHandleStopAsyncIteration:
     case Opcode::kYieldValue:
       return true;
+
+    case Opcode::kXDecref: {
+      auto op_type = inst.GetOperand(0)->type();
+      // None and nullptr can't execute arbitrary code on decref.
+      if (op_type <= TNoneType || op_type <= TNullptr) {
+        return false;
+      }
+      // If the type has a known destructor, the decref won't execute
+      // arbitrary Python code (it's a C-level tp_dealloc, not __del__).
+      if (op_type.runtimePyTypeDestructor().has_value()) {
+        return false;
+      }
+      return true;
+    }
 
     case Opcode::kCallCFunc:
       switch (static_cast<const CallCFunc&>(inst).func()) {
